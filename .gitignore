@@ -9,3 +9,7 @@ target
 _tasks/
 tests/
 scripts/
+11/
+
+#tmp
+.lock

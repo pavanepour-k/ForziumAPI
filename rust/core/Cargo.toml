@@ -1,0 +1,38 @@
+[package]
+name = "project-core"
+version = "0.1.0"
+edition = "2018"
+
+# This is the main entry for the project metadata
+authors = ["pavanepour.k <pavanepour@outlook.com>"]
+license = "MIT"
+description = "Core business logic for the project"
+
+# Optional: If your project is public, you can define a repository
+# repository = "https://github.com/pavanepour-k/forzium"
+
+[dependencies]
+# Standard Rust dependencies
+serde = { version = "1.0", features = ["derive"] }   # For serialization/deserialization
+serde_json = "1.0"  # JSON support via serde
+pyo3 = { version = "0.20", features = ["extension-module"] }  # PyO3 for Python bindings
+
+# Optional: If you are using async functionality, you can add async runtimes
+tokio = { version = "1", features = ["full"] }  # Optional: For async Rust
+
+# Optional: For Rust testing
+criterion = "0.3.6"  # For performance benchmarking
+# Unit test dependencies
+thiserror = "1.0.69"  # For structured error handling
+
+[dev-dependencies]
+# Development-only dependencies
+pytest = "6.2"  # Rust bindings for Python testing
+
+[build-dependencies]
+# Build dependencies, if needed (e.g., for compiling native extensions)
+maturin = "0.12"  # Used for building Python bindings from Rust
+
+[features]
+# Optional features (e.g., for optional compilation)
+default = []

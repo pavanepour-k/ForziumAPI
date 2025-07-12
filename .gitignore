@@ -13,3 +13,4 @@ scripts/
 
 #tmp
 .lock
+_*.md

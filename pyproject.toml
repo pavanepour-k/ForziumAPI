@@ -1,0 +1,57 @@
+[build-system]
+requires = ["maturin>=1.4.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "forzium"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "pydantic>=2.5.0",
+    "prometheus-client>=0.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+[tool.maturin]
+bindings = "pyo3"
+python-source = "python/src"
+module-name = "forzium._rust_lib"
+strip = true
+features = ["pyo3/extension-module"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["python/src"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--cov=forzium",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=90",
+]

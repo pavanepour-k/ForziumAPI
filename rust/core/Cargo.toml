@@ -2,21 +2,17 @@
 name = "project-core"
 version = "0.1.0"
 edition = "2018"
+rust-version = "1.75.0"
 
 # This is the main entry for the project metadata
 authors = ["pavanepour.k <pavanepour@outlook.com>"]
 license = "MIT"
 description = "Core business logic for the project"
 
-# Optional: If your project is public, you can define a repository
-# repository = "https://github.com/pavanepour-k/forzium"
-
 [dependencies]
 # Standard Rust dependencies
 serde = { version = "1.0", features = ["derive"] }   # For serialization/deserialization
 serde_json = "1.0"  # JSON support via serde
-
-# Optional: If you are using async functionality, you can add async runtimes
 tokio = { version = "1", features = ["full"] }  # Optional: For async Rust
 
 # Optional: For Rust testing
@@ -30,6 +26,16 @@ thiserror = "1.0.69"  # For structured error handling
 [build-dependencies]
 # Build dependencies, if needed (e.g., for compiling native extensions)
 maturin = "0.12"  # Used for building Python bindings from Rust
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
 
 [features]
 # Optional features (e.g., for optional compilation)

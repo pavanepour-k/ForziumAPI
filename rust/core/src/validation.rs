@@ -2,7 +2,7 @@ use crate::errors::ProjectError;
 
 /// Buffer Size Validation (10MB limit)
 pub fn validate_buffer_size(data: &[u8]) -> Result<(), ProjectError> {
-    const MAX_SIZE: usize = 10_485_760;  // 10MB
+    const MAX_SIZE: usize = 10_485_760; // 10MB
     if data.len() > MAX_SIZE {
         Err(ProjectError::Validation {
             code: "RUST_CORE_VALIDATION_BUFFER_TOO_LARGE".to_string(),
@@ -24,13 +24,8 @@ pub fn validate_utf8_string(data: &[u8]) -> Result<String, ProjectError> {
 }
 
 /// Num range Validation (0-255)
+/// NOTE: u8 is always in range 0-255, this function exists for API consistency
 pub fn validate_u8_range(value: u8) -> Result<(), ProjectError> {
-    if value < 0 || value > 255 {
-        Err(ProjectError::Validation {
-            code: "RUST_CORE_VALIDATION_OUT_OF_RANGE".to_string(),
-            message: format!("Value {} out of range (0-255)", value),
-        })
-    } else {
-        Ok(())
-    }
+    // A u8 value is always valid (0-255 by definition)
+    Ok(())
 }

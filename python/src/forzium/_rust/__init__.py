@@ -2,7 +2,7 @@ from typing import Union, Optional, Final
 import logging
 import functools
 import time
-from .. import _rust_lib
+import _rust_lib
 from ..metrics import ffi_calls_total, ffi_duration_seconds
 
 MINIMUM_RUST_VERSION: Final[str] = "0.1.0"

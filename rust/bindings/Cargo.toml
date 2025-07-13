@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 forzium = { path = "../core" }
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.25.1", features = ["extension-module"] }
 
 [lints.rust]
 unsafe_code = "deny"

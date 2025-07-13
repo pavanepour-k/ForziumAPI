@@ -5,6 +5,10 @@ on: [push]
 jobs:
   check:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+        
     steps:
       - uses: actions/checkout@v3
 
@@ -14,28 +18,16 @@ jobs:
           components: rustfmt, clippy
 
       - name: CHECK FORMAT
-        run: |
-          cd rust
-          cargo fmt -- --check
+        run: cargo fmt -- --check
 
       - name: RUN CLIPPY
-        run: |
-          cd rust
-          cargo clippy -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: RUN TESTS
-        run: |
-          cd rust/core
-          cargo test --all-features
-          cd ../..
+        run: cargo test --workspace --all-features
 
       - name: CHECK DOCUMENTATION
-        run: |
-          cd rust/core
-          cargo doc --no-deps --document-private-items
-          cd ../..
+        run: cargo doc --workspace --no-deps --document-private-items
 
       - name: SECURITY AUDIT
-        run: |
-          cd rust
-          cargo audit
+        run: cargo audit

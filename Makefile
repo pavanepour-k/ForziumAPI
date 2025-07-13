@@ -1,11 +1,13 @@
-.PHONY: all build test clean install format lint
+.PHONY: all build test clean install format lint coverage \
+        build-rust build-python test-rust test-python \
+        validate-build-order
 
 all: build
 
 build: build-rust build-python
 
 build-rust:
-	cd rust/core && cargo build --release
+	cargo build --workspace --release --manifest-path=rust/Cargo.toml
 	cd rust/bindings && maturin develop --release
 
 build-python:
@@ -14,18 +16,18 @@ build-python:
 test: test-rust test-python
 
 test-rust:
-	cd rust/core && cargo test
+	cargo test --workspace --manifest-path=rust/Cargo.toml
 	cd rust/bindings && cargo test
 
 test-python:
 	cd python && poetry run pytest
 
 coverage:
-	cd rust/core && cargo tarpaulin --out Html
+	cargo tarpaulin --manifest-path=rust/core/Cargo.toml --out Html
 	cd python && poetry run pytest --cov=src --cov-report=html
 
 clean:
-	cd rust && cargo clean
+	cargo clean --manifest-path=rust/Cargo.toml
 	cd python && rm -rf build dist *.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
@@ -35,11 +37,11 @@ install:
 	pre-commit install
 
 format:
-	cd rust && cargo fmt
+	cargo fmt --manifest-path=rust/Cargo.toml
 	cd python && poetry run black src tests
 
 lint:
-	cd rust && cargo clippy -- -D warnings
+	cargo clippy --workspace --all-targets --all-features --manifest-path=rust/Cargo.toml -- -D warnings
 	cd python && poetry run ruff check src tests
 	cd python && poetry run mypy src
 

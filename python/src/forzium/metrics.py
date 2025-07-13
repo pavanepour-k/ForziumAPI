@@ -1,19 +1,15 @@
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Histogram
 
 ffi_calls_total = Counter(
-    'ffi_calls_total',
-    'Total FFI calls',
+    'forzium_ffi_calls_total',
+    'Total FFI calls to Rust functions',
     ['function', 'status']
 )
 
 ffi_duration_seconds = Histogram(
-    'ffi_duration_seconds',
-    'FFI call duration',
+    'forzium_ffi_duration_seconds',
+    'FFI call duration in seconds',
     ['function']
 )
 
-memory_usage_bytes = Gauge(
-    'memory_usage_bytes',
-    'Current memory usage',
-    ['component']
-)
+__all__ = ['ffi_calls_total', 'ffi_duration_seconds']

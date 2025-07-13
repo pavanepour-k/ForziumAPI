@@ -5,7 +5,7 @@ description = ""
 authors = ["pavanepour-k"]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.14"
+python = "3.11"
 prometheus-client = "0.22.1"
 
 [tool.poetry.group.dev.dependencies]

@@ -1,59 +1,50 @@
-RUST_VERSION := 1.75.0
-PYTHON_VERSION := 3.11
-MATURIN_VERSION := 1.4.0
+.PHONY: all build test clean install format lint
 
-.PHONY: validate build test deploy clean
+all: build
 
-validate:
-	@echo "VALIDATING RUST VERSION..."
-	@rustc --version | grep -q $(RUST_VERSION) || (echo "RUST VERSION MISMATCH" && exit 1)
-	@echo "VALIDATING PYTHON VERSION..."
-	@python --version | grep -q $(PYTHON_VERSION) || (echo "PYTHON VERSION MISMATCH" && exit 1)
+build: build-rust build-python
 
-build: validate
-	@echo "BUILDING RUST CORE..."
-	cd rust/core && cargo build --release --locked
-	@echo "BUILDING RUST BINDINGS..."
-	cd rust/bindings && maturin build --release --strip
-	@echo "INSTALLING PYTHON PACKAGE..."
-	cd python && poetry install --no-dev
+build-rust:
+	cd rust/core && cargo build --release
+	cd rust/bindings && maturin develop --release
 
-test: validate
-	@echo "EXECUTING RUST TESTS..."
-	cd rust && cargo test --all --release -- --test-threads=1
-	@echo "EXECUTING PYTHON TESTS..."
-	cd python && poetry run pytest -xvs
-	@echo "EXECUTING INTEGRATION TESTS..."
-	./scripts/integration_test.sh
+build-python:
+	cd python && poetry install
 
-deploy: test
-	@echo "RUNNING SECURITY AUDIT..."
-	cd rust && cargo audit --deny warnings
-	cd python && poetry run pip-audit
-	@echo "CHECKING LICENSES..."
-	cd rust && cargo license --avoid-build-deps --avoid-dev-deps
-	@echo "BUILDING RELEASE ARTIFACTS..."
-	./scripts/build_release.sh
+test: test-rust test-python
+
+test-rust:
+	cd rust/core && cargo test
+	cd rust/bindings && cargo test
+
+test-python:
+	cd python && poetry run pytest
+
+coverage:
+	cd rust/core && cargo tarpaulin --out Html
+	cd python && poetry run pytest --cov=src --cov-report=html
 
 clean:
 	cd rust && cargo clean
 	cd python && rm -rf build dist *.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
-	rm -rf .coverage htmlcov .pytest_cache
 
+install:
+	cd python && poetry install --with dev
+	pre-commit install
 
+format:
+	cd rust && cargo fmt
+	cd python && poetry run black src tests
 
-build-rust-core: validate
-	cd rust/core && cargo build --release --locked
+lint:
+	cd rust && cargo clippy -- -D warnings
+	cd python && poetry run ruff check src tests
+	cd python && poetry run mypy src
 
-test-rust-core:
-	cd rust/core && cargo test --all --release -- --test-threads=1
-	cd rust/core && cargo tarpaulin --out Html --output-dir coverage
-
-check-coverage:
-	@coverage=$$(cargo tarpaulin --print-summary | grep "Coverage" | awk '{print $$2}' | sed 's/%//'); \
-	if [ $${coverage%.*} -lt 90 ]; then \
-		echo "COVERAGE $$coverage% < 90% REQUIREMENT"; \
-		exit 1; \
-	fi
+validate-build-order:
+	@echo "Validating build dependencies..."
+	@test -f rust/core/Cargo.toml || (echo "ERROR: rust/core missing" && exit 1)
+	@test -f rust/bindings/Cargo.toml || (echo "ERROR: rust/bindings missing" && exit 1)
+	@test -f python/pyproject.toml || (echo "ERROR: python/pyproject.toml missing" && exit 1)

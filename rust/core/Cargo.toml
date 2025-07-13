@@ -16,7 +16,7 @@ opt-level = 0
 debug = true
 
 [dependencies]
-thiserror = "1.0"
+thiserror = "2.0.12"
 
 [lints.rust]
 unsafe_code = "deny"

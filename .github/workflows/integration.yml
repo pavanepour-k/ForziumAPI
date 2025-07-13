@@ -1,0 +1,58 @@
+name: INTEGRATION
+
+on: [push]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: INSTALL RUST
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: SET UP PYTHON
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: INSTALL POETRY
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.0
+
+      - name: INSTALL MATURIN
+        run: pip install maturin==1.4.0
+
+      - name: BUILD RUST CORE
+        run: |
+          cd rust/core
+          cargo build --release --locked
+
+      - name: BUILD RUST BINDINGS
+        run: |
+          cd rust/bindings
+          maturin develop --release
+
+      - name: INSTALL PYTHON PACKAGE
+        run: |
+          cd python
+          poetry install
+
+      - name: RUN INTEGRATION TESTS
+        run: |
+          cd python
+          poetry run pytest tests/integration -xvs
+
+      - name: PERFORMANCE BENCHMARKS
+        run: |
+          cd rust
+          cargo bench
+          cd ../python
+          poetry run pytest tests/benchmarks -xvs
+
+      - name: MEMORY LEAK CHECK
+        run: |
+          cd python
+          poetry run pytest tests/integration/test_ffi_integration.py::TestMemoryLeaks -xvs

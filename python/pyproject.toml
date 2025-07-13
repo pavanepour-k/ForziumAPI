@@ -2,7 +2,7 @@
 name = "forzium"
 version = "0.1.0"
 description = "FastAPI Core Rust Refactoring"
-authors = ["pavanepour-k"]
+authors = ["pavanepour.k"]
 readme = "README.md"
 packages = [{include = "forzium", from = "src"}]
 

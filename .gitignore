@@ -1,11 +1,62 @@
-debug
-target
+# Rust
+target/
+Cargo.lock
 **/*.rs.bk
 *.pdb
-**/mutants.out*/
-__py**
+debug
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.cover
+.hypothesis/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+forzium/_rust_lib.*.so
+forzium/_rust_lib.pyd
+*.profraw
+coverage/
+.benchmarks/
+
 
 #pavanepour@
+rust/bindings/target/
+python/build/
+python/dist/
 _tasks/
 tests/
 scripts/

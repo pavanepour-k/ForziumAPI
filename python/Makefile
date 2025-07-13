@@ -20,9 +20,9 @@ test: install
 coverage: install
 	@echo "CHECKING TEST COVERAGE..."
 	poetry run pytest --cov=src --cov-report=term-missing --cov-report=html
-	@coverage=$$(poetry run pytest --cov=src --cov-report=term-missing | grep TOTAL | awk '{print $$4}' | sed 's/%//'); \
-	if [ $${coverage%.*} -lt 90 ]; then \
-		echo "COVERAGE $$coverage% < 90% REQUIREMENT"; \
+	@coverage=$(poetry run pytest --cov=src --cov-report=term-missing | grep TOTAL | awk '{print $4}' | sed 's/%//'); \
+	if [ ${coverage%.*} -lt 90 ]; then \
+		echo "COVERAGE $coverage% < 90% REQUIREMENT"; \
 		exit 1; \
 	fi
 

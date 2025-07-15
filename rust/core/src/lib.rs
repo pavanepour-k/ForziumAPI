@@ -1,5 +1,7 @@
 pub mod api;
+pub mod dependencies;
 pub mod errors;
+pub mod routing;
 pub mod types;
 
 mod validation;
@@ -33,7 +35,7 @@ mod tests {
         let data = vec![0u8; 10_485_761];
         let result = validate_buffer_size(&data);
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             ProjectError::Validation { code, message } => {
                 assert_eq!(code, "RUST_CORE_VALIDATION_BUFFER_TOO_LARGE");
@@ -73,7 +75,7 @@ mod tests {
         let data = &[0xFF, 0xFE, 0xFD];
         let result = validate_utf8_string(data);
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             ProjectError::Validation { code, message } => {
                 assert_eq!(code, "RUST_CORE_VALIDATION_INVALID_UTF8");

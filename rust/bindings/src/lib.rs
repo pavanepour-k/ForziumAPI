@@ -1,7 +1,10 @@
+mod routing;
+
 use forzium::api::{validate_buffer_size, validate_u8_range, validate_utf8_string};
 use forzium::errors::ProjectError;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use routing::PyRouteMatcher;
 
 /// Validate buffer size (10MB limit)
 #[pyfunction(name = "validate_buffer_size", signature = (data, /))]

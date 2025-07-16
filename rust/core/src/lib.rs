@@ -1,6 +1,8 @@
 pub mod api;
 pub mod dependencies;
 pub mod errors;
+pub mod request;
+pub mod response;
 pub mod routing;
 pub mod types;
 
@@ -64,10 +66,10 @@ mod tests {
 
     #[test]
     fn test_validate_utf8_string_unicode() {
-        let data = "天城越え 🌍".as_bytes();
+        let data = "隠しきれない".as_bytes();
         let result = validate_utf8_string(data);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "天城越え 🌍");
+        assert_eq!(result.unwrap(), "隠しきれない");
     }
 
     #[test]

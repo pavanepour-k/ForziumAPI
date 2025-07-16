@@ -1,4 +1,4 @@
-from typing import Union, Optional, Final
+from typing import Union, Optional, Final, Dict, Any
 import logging
 import functools
 import time
@@ -71,4 +71,48 @@ def validate_u8_range(value: int) -> int:
         logger.error(f"RUST U8 VALIDATION FAILED: {e}")
         raise
 
-__all__ = ['validate_buffer_size', 'validate_utf8_string', 'validate_u8_range']
+@with_timeout(30.0)
+def parse_query_params(query: str) -> Dict[str, str]:
+    if not isinstance(query, str):
+        raise TypeError(f"EXPECTED str, GOT {type(query).__name__}")
+    
+    try:
+        result = _rust_lib.request.parse_query_params(query)
+        return result
+    except Exception as e:
+        logger.error(f"RUST QUERY PARSING FAILED: {e}")
+        raise
+
+@with_timeout(30.0)
+def parse_json(data: bytes) -> Any:
+    if not isinstance(data, bytes):
+        raise TypeError(f"EXPECTED bytes, GOT {type(data).__name__}")
+    
+    try:
+        result = _rust_lib.request.parse_json(data)
+        return result
+    except Exception as e:
+        logger.error(f"RUST JSON PARSING FAILED: {e}")
+        raise
+
+@with_timeout(30.0)
+def parse_form(data: bytes) -> Dict[str, str]:
+    if not isinstance(data, bytes):
+        raise TypeError(f"EXPECTED bytes, GOT {type(data).__name__}")
+    
+    try:
+        result = _rust_lib.request.parse_form(data)
+        return result
+    except Exception as e:
+        logger.error(f"RUST FORM PARSING FAILED: {e}")
+        raise
+
+__all__ = [
+    'validate_buffer_size', 
+    'validate_utf8_string', 
+    'validate_u8_range',
+    'parse_query_params',
+    'parse_json',
+    'parse_form',
+    'PyRouteMatcher'
+]

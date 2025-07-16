@@ -57,7 +57,6 @@ rust/bindings/target/
 python/build/
 python/dist/
 _tasks/
-tests/
 scripts/
 11/
 

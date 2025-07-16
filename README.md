@@ -4,28 +4,31 @@ Completed Tasks
 
 rust/
 ├── core/src/
-│   ├── routing/          # NEW
+│   ├── routing/          # DONE
 │   │   ├── mod.rs
 │   │   ├── parser.rs
 │   │   ├── matcher.rs
 │   │   └── types.rs
-│   ├── dependencies/     # NEW
+│   ├── dependencies/     # DONE
 │   │   ├── mod.rs
 │   │   ├── resolver.rs
 │   │   └── types.rs
 │   ├── validation/       # TODO
 │   │   ├── mod.rs
 │   │   └── pydantic.rs
-│   ├── request/          # TODO
+│   ├── request/          # NEW
 │   │   ├── mod.rs
+│   │   ├── types.rs
 │   │   └── parser.rs
 │   └── response/         # TODO
 │       ├── mod.rs
+│       ├── types.rs
 │       └── serializer.rs
 ├── bindings/src/
-│   ├── routing.rs        # TODO
+│   ├── lib.rs            # DONE
+│   ├── routing.rs        # DONE
 │   ├── dependencies.rs   # TODO
-│   └── request.rs        # TODO
+│   └── request.rs        # DONE
 python/
 ├── src/forzium/
 │   ├── routing/          # TODO

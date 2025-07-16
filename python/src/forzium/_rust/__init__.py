@@ -12,6 +12,8 @@ if hasattr(_rust_lib, "__version__"):
 
 logger = logging.getLogger(__name__)
 
+PyRouteMatcher = _rust_lib.PyRouteMatcher
+
 def with_timeout(seconds: float = 30.0):
     def decorator(func):
         @functools.wraps(func)

@@ -30,6 +30,7 @@ from .api import *
 from .core import *
 from .validators import *
 from .exceptions import *
+from .routing import Router
 
 # STEP 6: VALIDATION
 def _validate_installation():

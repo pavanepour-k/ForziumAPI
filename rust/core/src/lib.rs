@@ -13,9 +13,8 @@ pub mod request;
 pub mod response;
 pub mod routing;
 pub mod types;
-
-// **VALIDATION MODULE REGISTRATION**
 pub mod validation;
+
 
 #[cfg(test)]
 mod tests {

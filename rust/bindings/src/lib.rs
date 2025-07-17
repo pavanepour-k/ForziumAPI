@@ -1,4 +1,8 @@
 mod routing;
+mod request;
+mod dependencies;
+mod response;
+mod validation;
 
 use forzium::api::{validate_buffer_size, validate_u8_range, validate_utf8_string};
 use forzium::errors::ProjectError;
@@ -39,9 +43,22 @@ fn validate_u8_range_py(value: u8) -> PyResult<()> {
 /// MANDATORY: Register all functions with correct module name
 #[pymodule]
 fn _rust_lib(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    // Register validation functions
     m.add_function(wrap_pyfunction!(validate_buffer_size_py, m)?)?;
     m.add_function(wrap_pyfunction!(validate_utf8_string_py, m)?)?;
     m.add_function(wrap_pyfunction!(validate_u8_range_py, m)?)?;
+    
+    // Register routing class
+    m.add_class::<PyRouteMatcher>()?;
+    
+    // Register all submodules
+    request::register_module(m)?;
+    dependencies::register_module(m)?;
+    response::register_module(m)?;
+    validation::register_module(m)?;
+    
+    // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    
     Ok(())
 }

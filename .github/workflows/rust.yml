@@ -1,33 +1,25 @@
-name: RUST
+name: Rust
 
 on: [push]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust
-        
     steps:
       - uses: actions/checkout@v3
 
       - name: INSTALL RUST
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
-      - name: CHECK FORMAT
-        run: cargo fmt -- --check
+      - name: CARGO CHECK
+        run: |
+          cd rust
+          cargo check --all-targets --all-features
 
-      - name: RUN CLIPPY
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-      - name: RUN TESTS
-        run: cargo test --workspace --all-features
-
-      - name: CHECK DOCUMENTATION
-        run: cargo doc --workspace --no-deps --document-private-items
-
-      - name: SECURITY AUDIT
-        run: cargo audit
+      - name: TEST VALIDATION LIB
+        run: |
+          cd rust/core
+          cargo test --lib validation

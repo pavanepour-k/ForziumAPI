@@ -11,6 +11,15 @@ crate-type = ["cdylib"]
 [dependencies]
 forzium = { path = "../core" }
 pyo3 = { version = "0.25.1", features = ["extension-module"] }
+log = "0.4"
+env_logger = "0.11"
+
+[dev-dependencies]
+criterion = { version = "0.6.0", features = ["html_reports"] }
+
+[features]
+default = []
+python-testing = ["pyo3/auto-initialize"]
 
 [lints.rust]
 unsafe_code = "deny"

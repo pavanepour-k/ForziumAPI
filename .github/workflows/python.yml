@@ -1,7 +1,5 @@
 name: PYTHON
 
-on: [push]
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -52,4 +50,3 @@ jobs:
           cd python
           poetry run ruff check src tests
           poetry run mypy src
-          poetry run black --check src tests

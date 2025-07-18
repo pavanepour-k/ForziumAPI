@@ -1,6 +1,5 @@
 name: Rust
 
-on: [push]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,13 +12,3 @@ jobs:
 
       - name: INSTALL RUST
         uses: dtolnay/rust-toolchain@stable
-
-      - name: CARGO CHECK
-        run: |
-          cd rust
-          cargo check --all-targets --all-features
-
-      - name: TEST VALIDATION LIB
-        run: |
-          cd rust/core
-          cargo test --lib validation

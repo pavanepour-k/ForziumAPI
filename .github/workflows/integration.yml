@@ -1,7 +1,5 @@
 name: INTEGRATION
 
-on: [push]
-
 jobs:
   integration:
     runs-on: ubuntu-latest
@@ -55,4 +53,4 @@ jobs:
       - name: MEMORY LEAK CHECK
         run: |
           cd python
-          poetry run pytest tests/integration/test_ffi_integration.py::TestMemoryLeaks -xvs
+

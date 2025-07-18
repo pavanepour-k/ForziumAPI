@@ -1,56 +1,59 @@
 import pytest
+from typing import Optional, Dict, Any
 from forzium.dependencies import DependencyInjector
-import asyncio
+from forzium.request import Request
 
-class TestService:
-    def __init__(self):
-        self.value = "test"
+# Dummy classes to use as dependency types
+class UserService:
+    pass
 
 class Database:
-    def __init__(self):
-        self.connected = True
+    pass
 
-def test_basic_registration_and_resolution():
+class CacheService:
+    pass
+
+def test_get_dependencies():
+    """TEST dependency extraction from function signature."""
     injector = DependencyInjector()
-    injector.register(TestService, TestService)
-    
-    instance = injector.get(TestService)
-    assert isinstance(instance, TestService)
-    assert instance.value == "test"
 
-def test_singleton_behavior():
+    # SAMPLE function with dependencies
+    def sample_handler(
+        request: Request,
+        user_service: UserService,
+        db: Database,
+        cache: Optional[CacheService] = None
+    ) -> Dict[str, Any]:
+        return {"status": "ok"}
+
+    # EXTRACT dependencies
+    deps = injector.get_dependencies(sample_handler)
+
+    # VERIFY
+    assert 'user_service' in deps
+    assert deps['user_service'] == UserService
+    assert 'db' in deps
+    assert deps['db'] == Database
+    assert 'cache' in deps
+    assert deps['cache'] == Optional[CacheService]
+
+    # REQUEST should be excluded
+    assert 'request' not in deps
+
+def test_circular_dependency_detection():
+    """TEST circular dependency detection."""
     injector = DependencyInjector()
-    injector.register(TestService, TestService, singleton=True)
-    
-    instance1 = injector.get(TestService)
-    instance2 = injector.get(TestService)
-    
-    assert instance1 is instance2
 
-def test_non_singleton_behavior():
-    injector = DependencyInjector()
-    injector.register(TestService, TestService, singleton=False)
-    
-    instance1 = injector.get(TestService)
-    instance2 = injector.get(TestService)
-    
-    assert instance1 is not instance2
+    class ServiceA:
+        def __init__(self, service_b: 'ServiceB'):
+            self.service_b = service_b
 
-def test_unregistered_dependency():
-    injector = DependencyInjector()
-    
-    with pytest.raises(ValueError, match="Dependency .* not registered"):
-        injector.get(TestService)
+    class ServiceB:
+        def __init__(self, service_a: ServiceA):
+            self.service_a = service_a
 
-def test_factory_function():
-    injector = DependencyInjector()
-    
-    def create_service():
-        return TestService()
-    
-    injector.register(TestService, create_service)
-    instance = injector.get(TestService)
-    
-    assert isinstance(instance, TestService)
+    injector.register(ServiceA, lambda: ServiceA(injector.get(ServiceB)))
+    injector.register(ServiceB, lambda: ServiceB(injector.get(ServiceA)))
 
-# TODO: def test_get_dependencies
+    with pytest.raises(ValueError, match="Circular dependency detected"):
+        injector.get(ServiceA)

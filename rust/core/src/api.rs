@@ -1,3 +1,6 @@
+//! Unified public API surface of core module
+//! Import this module to access all major components of the core logic
+
 pub use crate::dependencies::{Dependency, DependencyResolver, DependencyScope};
 pub use crate::request::{
     parse_form_body, parse_json_body, parse_query_string, HttpRequest, MultipartPart, RequestBody,

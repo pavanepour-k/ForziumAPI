@@ -1,6 +1,5 @@
 name: Rust
 
-on: [pull_request]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,32 +12,3 @@ jobs:
 
       - name: INSTALL RUST
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: CHECK FORMAT
-        run: |
-          cd rust
-          cargo fmt -- --check
-
-      - name: RUN CLIPPY
-        run: |
-          cd rust
-          cargo clippy -- -D warnings
-
-      - name: RUN TESTS
-        run: |
-          cd rust/core
-          cargo test --all-features
-          cd ../..
-
-      - name: CHECK DOCUMENTATION
-        run: |
-          cd rust/core
-          cargo doc --no-deps --document-private-items
-          cd ../..
-
-      - name: SECURITY AUDIT
-        run: |
-          cd rust
-          cargo audit

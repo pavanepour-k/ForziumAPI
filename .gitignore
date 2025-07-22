@@ -59,6 +59,7 @@ python/dist/
 _tasks/
 scripts/
 11/
+*.sh
 
 #tmp
 .lock

@@ -60,7 +60,7 @@ _tasks/
 scripts/
 11/
 *.sh
-
+MIGRATION_LOG.md
 #tmp
 .lock
 _*.md

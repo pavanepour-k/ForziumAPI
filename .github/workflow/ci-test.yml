@@ -1,0 +1,39 @@
+name: CI Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: stable
+      - name: Build and test Rust project
+        run: |
+          cargo build --verbose
+          cargo test --verbose
+
+  python_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # If your project has a requirements.txt, uncomment the following line:
+          # pip install -r requirements.txt
+      - name: Run Python tests
+        run: |
+          # If your project uses pytest, run:
+          pytest

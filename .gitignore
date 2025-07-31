@@ -1,3 +1,7 @@
 *.sh
 _docs/
 *.md
+.coverage
+*pycache*
+*.pyc
+*__pycache__*

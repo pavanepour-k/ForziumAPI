@@ -1,0 +1,13 @@
+[package]
+name = "forzium_engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "forzium_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25.1", features = ["abi3-py311", "extension-module"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+hyper = { version = "0.14", features = ["full"] }

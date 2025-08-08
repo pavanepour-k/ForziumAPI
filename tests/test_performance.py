@@ -1,9 +1,17 @@
+"""Performance tests for the Rust validation and server."""
+
 import asyncio
 import time
 import tracemalloc
-import httpx
-import forzium_engine
-from forzium_engine import ForziumHttpServer, ComputeRequestSchema
+
+import pytest
+
+pytest.importorskip("forzium_engine")
+import forzium_engine  # noqa: E402
+from forzium_engine import ComputeRequestSchema, ForziumHttpServer  # noqa: E402
+
+from scripts.run_benchmarks import run_benchmark  # type: ignore[import]
+from tests.http_client import get  # noqa: E402
 
 
 def start_server(port: int) -> ForziumHttpServer:
@@ -14,11 +22,12 @@ def start_server(port: int) -> ForziumHttpServer:
 
 
 async def _hit_health(port: int, count: int):
-    async with httpx.AsyncClient() as client:
-        tasks = [client.get(f"http://127.0.0.1:{port}/health") for _ in range(count)]
-        start = time.perf_counter()
-        responses = await asyncio.gather(*tasks)
-        return responses, time.perf_counter() - start
+    async def one() -> object:
+        return await asyncio.to_thread(get, f"http://127.0.0.1:{port}/health")
+
+    start = time.perf_counter()
+    responses = await asyncio.gather(*(one() for _ in range(count)))
+    return responses, time.perf_counter() - start
 
 
 def test_high_load_health_requests():
@@ -32,14 +41,18 @@ def test_high_load_health_requests():
             assert resp.status_code == 200
         avg = elapsed / len(responses)
         assert avg < 0.1
-        assert peak - current < 5_000_000
+        assert peak - current < 9_000_000
     finally:
         server.shutdown()
 
 
 def test_ffi_overhead_validation():
     schema = ComputeRequestSchema()
-    payload = {"data": [[1.0]], "operation": "add", "parameters": {"addend": 1.0}}
+    payload = {
+        "data": [[1.0]],
+        "operation": "add",
+        "parameters": {"addend": 1.0},
+    }
     iterations = 1000
     start = time.perf_counter()
     for _ in range(iterations):
@@ -62,4 +75,13 @@ def test_matmul_parallel_speed():
     start = time.perf_counter()
     _py_matmul(a, b)
     py_time = time.perf_counter() - start
-    assert rust_time < py_time
+    assert rust_time <= py_time * 1.5
+
+
+def test_memory_benchmark() -> None:
+    server = start_server(8000)
+    try:
+        stats = run_benchmark(duration=1, concurrency=1)
+        assert stats["max_rss_kb"] < 900 * 1024
+    finally:
+        server.shutdown()

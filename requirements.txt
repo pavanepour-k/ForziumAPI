@@ -1,2 +1,8 @@
 # Runtime dependencies for the test suite
-httpx==0.27.0          # Remove when Rust server is default
+
+grpcio
+grpcio-tools
+grpcio-health-checking
+pytest
+coverage
+pytest-cov

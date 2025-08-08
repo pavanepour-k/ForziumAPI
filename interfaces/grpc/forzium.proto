@@ -1,0 +1,11 @@
+syntax = "proto3";
+package forzium;
+
+message JsonPayload {
+    bytes payload = 1;
+}
+
+service Forzium {
+    rpc Compute (JsonPayload) returns (JsonPayload);
+    rpc StreamCompute (JsonPayload) returns (stream JsonPayload);
+}

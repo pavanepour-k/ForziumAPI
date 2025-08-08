@@ -12,17 +12,17 @@ impl ArenaManager {
     /// Create an arena manager with default pool sizes.
     pub fn new() -> Self {
         Self {
-            small: PoolAllocator::new(64, 128),
-            medium: PoolAllocator::new(256, 64),
+            small: PoolAllocator::new(64 * 128),
+            medium: PoolAllocator::new(256 * 64),
         }
     }
 
     /// Allocate a buffer of roughly `size` bytes.
     pub fn allocate(&self, size: usize) -> Option<Vec<u8>> {
         if size <= 64 {
-            self.small.allocate()
+            self.small.allocate(size)
         } else if size <= 256 {
-            self.medium.allocate()
+            self.medium.allocate(size)
         } else {
             None
         }
@@ -47,9 +47,9 @@ mod tests {
     fn allocate_small_and_medium() {
         let arena = ArenaManager::new();
         let s = arena.allocate(32).expect("small alloc");
-        assert_eq!(s.len(), 64); // block size
+        assert_eq!(s.len(), 32);
         let m = arena.allocate(128).expect("medium alloc");
-        assert_eq!(m.len(), 256);
+        assert_eq!(m.len(), 128);
         assert!(arena.allocate(1024).is_none());
         arena.deallocate(s);
         arena.deallocate(m);

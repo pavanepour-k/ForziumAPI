@@ -1,3 +1,5 @@
-"""Protocols defining cross-language behaviours"""
+"""Protocols defining cross-language behaviours."""
 
-__all__ = ["async_protocol"]
+from .async_protocol import AsyncComputeProtocol
+
+__all__ = ["AsyncComputeProtocol"]

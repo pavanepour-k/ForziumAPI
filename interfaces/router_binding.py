@@ -1,43 +1,53 @@
+"""Register ForziumApp routes with the Rust server."""
+
 import json
-from fastapi.routing import APIRoute
-from fastapi import FastAPI
-from core.python_api.services.orchestration_service import run_computation, stream_computation
+from typing import Callable
 
 
-def register_routes(server, app: FastAPI) -> None:
-    """Register FastAPI routes with the Rust server."""
-    for route in app.router.routes:
-        if isinstance(route, APIRoute):
-              if route.path == "/health" and "GET" in route.methods:
-                  def health_handler(_body: bytes) -> tuple[int, str]:
-                      return 200, json.dumps({"status": "ok"})
-                  server.add_route("GET", "/health", health_handler)
-              elif route.path == "/compute" and "POST" in route.methods:
-                  def compute_handler(body: bytes) -> tuple[int, str]:
-                      payload = json.loads(body.decode())
-                      try:
-                          result = run_computation(
-                              payload.get("data"),
-                              payload.get("operation"),
-                              payload.get("parameters", {}),
-                          )
-                          return 200, json.dumps(result)
-                      except ValueError as exc:
-                          return 400, json.dumps({"detail": str(exc)})
-                  server.add_route("POST", "/compute", compute_handler)
-              elif route.path == "/stream" and "POST" in route.methods:
-                  def stream_handler(body: bytes) -> tuple[int, str]:
-                      payload = json.loads(body.decode())
-                      try:
-                          rows = list(
-                              stream_computation(
-                                  payload.get("data"),
-                                  payload.get("operation"),
-                                  payload.get("parameters", {}),
-                              )
-                          )
-                          text = "\n".join(json.dumps(r) for r in rows)
-                          return 200, text
-                      except ValueError as exc:
-                          return 400, json.dumps({"detail": str(exc)})
-                  server.add_route("POST", "/stream", stream_handler)
+def register_routes(server, app) -> None:
+    """Register ForziumApp routes with the Rust server."""
+    for route in app.routes:
+        method = route["method"]
+        path = route["path"]
+        func = route["func"]
+        param_names = route["param_names"]
+        expects_body = route["expects_body"]
+
+        def make_handler(
+            func: Callable,
+            param_names: list[str],
+            expects_body: bool,
+        ) -> Callable[[bytes, tuple], tuple[int, str]]:
+            """Create a handler converting bytes and params to a response."""
+
+            def handler(body: bytes, params: tuple) -> tuple[int, str]:
+                kwargs = {name: value for name, value in zip(param_names, params)}
+                if expects_body:
+                    payload = json.loads(body.decode()) if body else {}
+                    kwargs["payload"] = payload
+                try:
+                    result = func(**kwargs)
+                except ValueError as exc:
+                    return 400, json.dumps({"detail": str(exc)})
+                status = 200
+                if (
+                    isinstance(result, tuple)
+                    and len(result) == 2
+                    and isinstance(result[0], int)
+                ):
+                    status, data = result
+                else:
+                    data = result
+                if isinstance(data, (dict, list)):
+                    body_str = json.dumps(data)
+                else:
+                    body_str = str(data)
+                return status, body_str
+
+            return handler
+
+        server.add_route(
+            method,
+            path,
+            make_handler(func, param_names, expects_body),
+        )

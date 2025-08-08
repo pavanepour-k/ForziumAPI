@@ -1,0 +1,18 @@
+[run]
+source =
+    core
+    forzium
+    infrastructure
+    interfaces
+omit =
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 1
+sort = cover
+fail_under = 90
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__:
+    raise NotImplementedError

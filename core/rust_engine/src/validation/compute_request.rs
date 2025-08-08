@@ -64,14 +64,10 @@ mod tests {
             data.set_item("data", vec![vec![1.0, 2.0], vec![3.0, 4.0]])
                 .unwrap();
             data.set_item("operation", "add").unwrap();
-            let out = schema.validate(py, data).unwrap();
-            assert_eq!(
-                out.get_item("operation")
-                    .unwrap()
-                    .extract::<String>()
-                    .unwrap(),
-                "add"
-            );
+            let out = schema.validate(py, &data).unwrap();
+            let op_any = out.get_item("operation").unwrap().unwrap();
+            let op: String = op_any.extract().unwrap();
+            assert_eq!(op, "add");
         });
     }
 
@@ -83,7 +79,7 @@ mod tests {
             data.set_item("data", vec![vec![1.0], vec![2.0, 3.0]])
                 .unwrap();
             data.set_item("operation", "add").unwrap();
-            assert!(schema.validate(py, data).is_err());
+            assert!(schema.validate(py, &data).is_err());
         });
     }
 }

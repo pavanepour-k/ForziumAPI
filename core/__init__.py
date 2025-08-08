@@ -1,5 +1,6 @@
-"""Top-level package exposing the FastAPI app"""
+"""Top-level package exposing the Forzium app"""
 
-from .python_api import app
+from .app import app, server
 
-__all__ = ["app"]
+
+__all__ = ["app", "server"]

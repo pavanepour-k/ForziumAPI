@@ -12,8 +12,7 @@ RUN pip install maturin && maturin build -m core/rust_engine/Cargo.toml
 FROM python:3.11-slim
 WORKDIR /app
 COPY --from=builder /build/target/wheels/forzium_engine-*.whl /tmp/
-RUN pip install /tmp/forzium_engine-*.whl && \
-    pip install fastapi httpx
+RUN pip install /tmp/forzium_engine-*.whl
 COPY . /app
 EXPOSE 8000
 CMD ["python", "run_server.py"]

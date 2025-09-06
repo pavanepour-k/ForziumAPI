@@ -1,8 +1,8 @@
 """Data types used across language boundaries."""
 
+from .cancellation import CancellationToken
 from .collections import Matrix
 from .primitives import Float64
-from .cancellation import CancellationToken
 
 __all__ = ["Float64", "Matrix", "ComputeRequestModel", "CancellationToken"]
 

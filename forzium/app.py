@@ -10,9 +10,11 @@ from dataclasses import MISSING, fields, is_dataclass
 from typing import (
     Any,
     Callable,
+    Coroutine,
     Dict,
     List,
     Tuple,
+    cast,
     get_args,
     get_origin,
 )
@@ -20,12 +22,9 @@ from urllib.parse import parse_qs
 
 from infrastructure.monitoring import get_metric, prometheus_metrics, record_metric
 
-from .dependency import (
-    BackgroundTasks,
-    Depends,
-    Request,
-    Response as HTTPResponse,
-)
+from .dependency import BackgroundTasks, Depends, Request
+from .dependency import Response as HTTPResponse
+from .dependency import solve_dependencies
 from .http2 import _begin as _push_begin
 from .http2 import _end as _push_end
 from .websockets import WebSocket
@@ -41,14 +40,20 @@ class ForziumApp:
         self._request_hooks: list[
             Callable[
                 [bytes, tuple, bytes],
-                tuple[bytes, tuple, bytes, tuple[int, str, dict[str, str]] | None],
+                tuple[
+                    bytes, tuple, bytes, tuple[int, str, dict[str, str]] | None
+                ],  # noqa: E501
             ]
         ] = []
         self._response_hooks: list[
-            Callable[[int, str, dict[str, str]], tuple[int, str, dict[str, str]]]
+            Callable[
+                [int, str, dict[str, str]], tuple[int, str, dict[str, str]]
+            ]  # noqa: E501
         ] = []
         self._asgi_middleware: list[
-            Callable[[Request, Callable[[Request], HTTPResponse]], HTTPResponse]
+            Callable[
+                [Request, Callable[[Request], HTTPResponse]], HTTPResponse
+            ]  # noqa: E501
         ] = []
         self._startup_hooks: list[Callable[[], Any]] = []
         self._shutdown_hooks: list[Callable[[], Any]] = []
@@ -57,11 +62,21 @@ class ForziumApp:
         self._docs_route_registered = False
         self.security_schemes: dict[str, Any] = {}
         self.dependency_overrides: dict[Callable[..., Any], Callable[..., Any]] = {}
+        self._openapi_customizer: Callable[[dict[str, Any]], dict[str, Any]] | None = (
+            None
+        )
 
     def add_security_scheme(self, name: str, scheme: dict[str, Any]) -> None:
         """Register security *scheme* under *name*."""
 
         self.security_schemes[name] = scheme
+
+    def customize_openapi(
+        self, func: Callable[[dict[str, Any]], dict[str, Any]]
+    ) -> None:
+        """Apply *func* to modify generated OpenAPI documents."""
+
+        self._openapi_customizer = func
 
     def openapi_schema(self) -> dict[str, Any]:
         """Generate an OpenAPI document for the registered routes."""
@@ -76,16 +91,13 @@ class ForziumApp:
         def type_schema(tp: Any) -> dict[str, Any]:
             origin = get_origin(tp)
             if is_dataclass(tp):
-                name = tp.__name__
+                name = getattr(tp, "__name__", tp.__class__.__name__)
                 if name not in components["schemas"]:
                     props: dict[str, Any] = {}
                     required: list[str] = []
-                    for f in fields(tp):
+                    for f in fields(tp):  # type: ignore[arg-type]
                         props[f.name] = type_schema(f.type)
-                        if (
-                            f.default is MISSING
-                            and f.default_factory is MISSING
-                        ):
+                        if f.default is MISSING and f.default_factory is MISSING:
                             required.append(f.name)
                     schema: dict[str, Any] = {
                         "type": "object",
@@ -108,13 +120,40 @@ class ForziumApp:
                 return {"type": "string"}
             return {"type": "object"}
 
-        paths: dict[str, dict[str, dict[str, Any]]] = {}
         for route in self.routes:
-            op: dict[str, Any] = {"responses": {"200": {"description": "OK"}}}
+            responses: dict[str, dict[str, Any]] = {"200": {"description": "OK"}}
             ret = inspect.signature(route["func"]).return_annotation
-            op["responses"]["200"]["content"] = {
+            responses["200"]["content"] = {
                 "application/json": {"schema": type_schema(ret)}
             }
+            for code, resp in route.get("responses", {}).items():
+                responses[str(code)] = resp
+            op: dict[str, Any] = {"responses": responses}
+            if route.get("summary"):
+                op["summary"] = route["summary"]
+            if route.get("description"):
+                op["description"] = route["description"]
+            params = []
+            for name, anno in route.get("path_params", []):
+                params.append(
+                    {
+                        "name": name,
+                        "in": "path",
+                        "required": True,
+                        "schema": type_schema(anno),
+                    }
+                )
+            for name, anno in route.get("query_params", []):
+                params.append(
+                    {
+                        "name": name,
+                        "in": "query",
+                        "required": False,
+                        "schema": type_schema(anno),
+                    }
+                )
+            if params:
+                op["parameters"] = params
             if route.get("tags"):
                 op["tags"] = route["tags"]
                 tag_set.update(route["tags"])
@@ -131,6 +170,8 @@ class ForziumApp:
         }
         if tag_set:
             doc["tags"] = [{"name": t} for t in sorted(tag_set)]
+        if self._openapi_customizer:
+            doc = self._openapi_customizer(doc)
         return doc
 
     def _register_schema_route(self) -> None:
@@ -308,19 +349,32 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
         method: str,
         host: str | None = None,
         tags: list[str] | None = None,
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Register *func* for *method* and *path*."""
+        """Register *func* for *method* and *path*.
+
+        Parameters are stored to build OpenAPI operations, including optional
+        ``summary`` and ``description`` metadata.
+        """
         param_names, converters = self._extract_params(path)
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             sig = inspect.signature(func)
             expects_body = "payload" in sig.parameters
             query_params: List[Tuple[str, Any]] = []
-            dependencies: List[Tuple[str, Callable[..., Any]]] = []
+            path_params: List[Tuple[str, Any]] = []
+            param_dependencies: List[Tuple[str, Callable[..., Any]]] = []
+            route_dependencies: List[Tuple[str, Callable[..., Any]]] = []
             expects_request = False
             background_param: str | None = None
             for name, param in sig.parameters.items():
-                if name in param_names or name == "payload":
+                if name in param_names:
+                    path_params.append((name, param.annotation))
+                    continue
+                if name == "payload":
                     continue
                 if name == "session":
                     param_names.append(name)
@@ -336,9 +390,12 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     continue
                 default = param.default
                 if isinstance(default, Depends):
-                    dependencies.append((name, default.dependency))
+                    param_dependencies.append((name, default.dependency))
                 else:
                     query_params.append((name, param.annotation))
+            if dependencies:
+                for i, dep in enumerate(dependencies):
+                    route_dependencies.append((f"_dep{i}", dep.dependency))
             self.routes.append(
                 {
                     "method": method,
@@ -348,11 +405,15 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     "param_names": param_names,
                     "param_converters": converters,
                     "query_params": query_params,
+                    "path_params": path_params,
                     "expects_body": expects_body,
-                    "dependencies": dependencies,
+                    "dependencies": param_dependencies + route_dependencies,
                     "expects_request": expects_request,
                     "background_param": background_param,
                     "tags": tags or [],
+                    "responses": responses or {},
+                    "summary": summary,
+                    "description": description,
                     "dependency_overrides": self.dependency_overrides,
                 }
             )
@@ -363,7 +424,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     converters,
                     query_params,
                     expects_body,
-                    dependencies,
+                    param_dependencies + route_dependencies,
                     expects_request,
                     method,
                     path,
@@ -396,66 +457,172 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "GET", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "GET",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def post(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "POST", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "POST",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def put(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "PUT", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "PUT",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def delete(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "DELETE", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "DELETE",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def patch(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "PATCH", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "PATCH",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def head(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "HEAD", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "HEAD",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def options(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "OPTIONS", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "OPTIONS",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
     def trace(
         self,
         path: str,
         host: str | None = None,
         tags: list[str] | None = None,
-    ):
-        return self.route(path, "TRACE", host=host, tags=tags)
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(
+            path,
+            "TRACE",
+            host=host,
+            tags=tags,
+            responses=responses,
+            dependencies=dependencies,
+            summary=summary,
+            description=description,
+        )
 
-    def websocket(self, path: str, host: str | None = None):
+    def websocket(
+        self, path: str, host: str | None = None
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         param_names, converters = self._extract_params(path)
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -468,7 +635,9 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     "param_converters": converters,
                 }
             )
-            if self.server is not None and hasattr(self.server, "add_ws_route"):
+            if self.server is not None and hasattr(
+                self.server, "add_ws_route"
+            ):  # noqa: E501
                 handler = self._make_ws_handler(func, param_names, converters)
                 add_ws = getattr(self.server, "add_ws_route")
                 sig = inspect.signature(add_ws)
@@ -516,9 +685,9 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
         method: str = "GET",
         path: str = "",
         background_param: str | None = None,
-        override_providers: List[
-            Dict[Callable[..., Any], Callable[..., Any]]
-        ] | None = None,
+        override_providers: (
+            List[Dict[Callable[..., Any], Callable[..., Any]]] | None
+        ) = None,
     ) -> Callable[[bytes, tuple, bytes], Tuple[int, str, dict[str, str]]]:
         def handler(
             body: bytes, params: tuple, query: bytes
@@ -529,21 +698,23 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 "requests_total",
                 get_metric("requests_total") + 1,
             )
-            for hook in self._request_hooks:
-                body, params, query, resp = hook(body, params, query)
+            for req_hook in self._request_hooks:
+                body, params, query, resp = req_hook(body, params, query)
                 if resp is not None:
-                    status, body_str, headers = resp
-                    for rhook in self._response_hooks:
-                        status, body_str, headers = rhook(status, body_str, headers)
+                    status, body_str, resp_headers = resp
+                    for resp_hook in self._response_hooks:
+                        status, body_str, resp_headers = resp_hook(
+                            status, body_str, resp_headers
+                        )
                     pushes = _push_end(token)
                     if pushes:
-                        headers = dict(headers)
-                        headers["link"] = ", ".join(
+                        resp_headers = dict(resp_headers)
+                        resp_headers["link"] = ", ".join(
                             f"<{p}>; rel=preload" for p in pushes
                         )
                     duration = (time.time() - start) * 1000
                     record_metric("request_duration_ms", duration)
-                    return status, body_str, headers
+                    return status, body_str, resp_headers
             kwargs = {}
             for name, value in zip(param_names, params):
                 conv = converters.get(name)
@@ -562,25 +733,11 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     headers={},
                     path_params={name: val for name, val in zip(param_names, params)},
                 )
-            ctx_stack: list[tuple[Any, bool]] = []
             overrides = override_providers or [self.dependency_overrides]
-            for name, dep in dependencies:
-                dep_fn = dep
-                for mapping in overrides:
-                    if dep in mapping:
-                        dep_fn = mapping[dep]
-                dep_val = dep_fn()
-                if inspect.isawaitable(dep_val):
-                    dep_val = asyncio.run(dep_val)
-                elif hasattr(dep_val, "__aenter__") and hasattr(dep_val, "__aexit__"):
-                    cm = dep_val
-                    dep_val = asyncio.run(cm.__aenter__())
-                    ctx_stack.append((cm, True))
-                elif hasattr(dep_val, "__enter__") and hasattr(dep_val, "__exit__"):
-                    cm = dep_val
-                    dep_val = cm.__enter__()
-                    ctx_stack.append((cm, False))
-                kwargs[name] = dep_val
+            dep_vals, ctx_stack = solve_dependencies(dependencies, overrides)
+            for name, val in dep_vals.items():
+                if not name.startswith("_dep"):
+                    kwargs[name] = val
             if query:
                 parsed = parse_qs(query.decode())
                 for name, anno in query_params:
@@ -595,11 +752,11 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
             except ValueError as exc:
                 return 400, json.dumps({"detail": str(exc)}), {}
             finally:
-                for cm, is_async in reversed(ctx_stack):
+                for cleanup, is_async in reversed(ctx_stack):
                     if is_async:
-                        asyncio.run(cm.__aexit__(None, None, None))
+                        asyncio.run(cast(Coroutine[Any, Any, Any], cleanup()))
                     else:
-                        cm.__exit__(None, None, None)
+                        cleanup()
             if isinstance(result, HTTPResponse):
                 if bg_tasks and bg_tasks.tasks:
                     if result.background is None:
@@ -610,22 +767,27 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                         result.background = BackgroundTasks(
                             [result.background, *bg_tasks.tasks]
                         )
-                status, body_bytes, headers = result.serialize()
+                status, body_bytes, res_headers = result.serialize()
                 body_str = body_bytes.decode("latin1")
-                for hook in self._response_hooks:
-                    status, body_str, headers = hook(status, body_str, headers)
+                for resp_hook in self._response_hooks:
+                    status, body_str, res_headers = resp_hook(
+                        status, body_str, res_headers
+                    )
                 pushes = _push_end(token)
                 if pushes:
-                    headers["link"] = ", ".join(
+                    res_headers["link"] = ", ".join(
                         f"<{p}>; rel=preload" for p in pushes
                     )
                 duration = (time.time() - start) * 1000
                 record_metric("request_duration_ms", duration)
                 if result.background is not None:
-                    threading.Thread(
-                        target=lambda: asyncio.run(result.run_background())
+                    threading.Timer(
+                        0,
+                        lambda: asyncio.run(
+                            cast(Coroutine[Any, Any, Any], result.run_background())
+                        ),
                     ).start()
-                return status, body_str, headers
+                return status, body_str, res_headers
             status = 200
             headers: dict[str, str] = {}
             if (
@@ -637,19 +799,20 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
             else:
                 data = result
             body_str = json.dumps(data) if isinstance(data, (dict, list)) else str(data)
-            for hook in self._response_hooks:
-                status, body_str, headers = hook(status, body_str, headers)
+            for resp_hook in self._response_hooks:
+                status, body_str, headers = resp_hook(status, body_str, headers)
             pushes = _push_end(token)
             if pushes:
                 headers["link"] = ", ".join(f"<{p}>; rel=preload" for p in pushes)
             duration = (time.time() - start) * 1000
             record_metric("request_duration_ms", duration)
             return status, body_str, headers
+
         handler = self._apply_asgi_middleware(
             handler, param_names, method, path
-        )
+        )  # type: ignore[assignment]
         return handler
-    
+
     def _apply_asgi_middleware(
         self,
         handler: Callable[[bytes, tuple, bytes], tuple[int, str, dict[str, str]]],
@@ -698,7 +861,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                         asyncio.get_running_loop()
                         return res
                     except RuntimeError:
-                        res = asyncio.run(res)
+                        res = asyncio.run(cast(Coroutine[Any, Any, Any], res))
                 if isinstance(res, HTTPResponse):
                     st, b, hd = res.serialize()
                     return st, b.decode("latin1"), hd
@@ -768,13 +931,15 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
             return func
 
         return decorator
-        
+
     def include_router(
         self,
         router: "ForziumApp",
         prefix: str = "",
         host: str | None = None,
         tags: list[str] | None = None,
+        responses: dict[int | str, dict[str, Any]] | None = None,
+        dependencies: list[Depends] | None = None,
     ) -> None:
         """Attach routes from *router* under *prefix* with *tags*."""
         self._startup_hooks.extend(router._startup_hooks)
@@ -782,6 +947,10 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
         self._request_hooks.extend(router._request_hooks)
         self._response_hooks.extend(router._response_hooks)
         self.security_schemes.update(router.security_schemes)
+        extra_deps: list[Tuple[str, Callable[..., Any]]] = []
+        if dependencies:
+            for i, dep in enumerate(dependencies):
+                extra_deps.append((f"_depinc{i}", dep.dependency))
         for route in router.routes:
             if route["path"] == "/openapi.json":
                 continue
@@ -798,7 +967,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     route["param_converters"],
                     route["query_params"],
                     route["expects_body"],
-                    route["dependencies"],
+                    route["dependencies"] + extra_deps,
                     route.get("expects_request", False),
                     route["method"],
                     path,
@@ -807,9 +976,16 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 )
                 add_route = getattr(self.server, "add_route")
                 sig = inspect.signature(add_route)
-                wrapper = lambda b, p, q, h=handler: h(b, p, q)[:2]
+
+                def wrapper(body, params, query, h=handler):
+                    return h(body, params, query)[:2]
+
                 kwargs = {"host": rhost} if "host" in sig.parameters else {}
                 add_route(route["method"], path, wrapper, **kwargs)
+            merged_responses = {
+                **route.get("responses", {}),
+                **(responses or {}),
+            }
             self.routes.append(
                 {
                     "path": path,
@@ -818,12 +994,16 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     "param_names": route["param_names"],
                     "param_converters": route["param_converters"],
                     "query_params": route["query_params"],
+                    "path_params": route.get("path_params", []),
                     "expects_body": route["expects_body"],
-                    "dependencies": route["dependencies"],
+                    "dependencies": route["dependencies"] + extra_deps,
                     "expects_request": route.get("expects_request", False),
                     "background_param": route.get("background_param"),
                     "host": rhost,
                     "tags": route_tags,
+                    "responses": merged_responses,
+                    "summary": route.get("summary"),
+                    "description": route.get("description"),
                     "dependency_overrides": router.dependency_overrides,
                 }
             )

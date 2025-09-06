@@ -3,9 +3,26 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, Tuple
 
 from .security import create_jwt
+
+
+@dataclass
+class HTTPBasicCredentials:
+    """Credentials parsed from an HTTP Basic Authorization header."""
+
+    username: str
+    password: str
+
+
+@dataclass
+class HTTPAuthorizationCredentials:
+    """Credentials extracted from a Bearer Authorization header."""
+
+    scheme: str
+    credentials: str
 
 
 def parse_basic_auth(header: str | None) -> Tuple[str, str] | None:
@@ -26,6 +43,16 @@ def parse_basic_auth(header: str | None) -> Tuple[str, str] | None:
         return None
 
 
+def http_basic(header: str | None) -> HTTPBasicCredentials | None:
+    """Return ``HTTPBasicCredentials`` parsed from Authorization *header*."""
+
+    creds = parse_basic_auth(header)
+    if creds is None:
+        return None
+    user, pw = creds
+    return HTTPBasicCredentials(username=user, password=pw)
+
+
 def get_bearer_token(header: str | None) -> str | None:
     """Return Bearer token from Authorization *header* if present."""
 
@@ -35,6 +62,15 @@ def get_bearer_token(header: str | None) -> str | None:
     if scheme.lower() != "bearer" or not token:
         return None
     return token
+
+
+def http_bearer(header: str | None) -> HTTPAuthorizationCredentials | None:
+    """Return credentials from Bearer Authorization *header*."""
+
+    token = get_bearer_token(header)
+    if token is None:
+        return None
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
 def get_api_key(
@@ -68,7 +104,7 @@ def oauth2_password_flow(
 
     if not verify(username, password):
         return None
-    payload = {"sub": username}
+    payload: dict[str, object] = {"sub": username}
     if scopes:
         payload["scopes"] = list(scopes)
     return create_jwt(payload, secret)
@@ -85,7 +121,7 @@ def oauth2_client_credentials_flow(
 
     if not verify(client_id, client_secret):
         return None
-    payload = {"client_id": client_id}
+    payload: dict[str, object] = {"client_id": client_id}
     if scopes:
         payload["scopes"] = list(scopes)
     return create_jwt(payload, secret)
@@ -102,7 +138,7 @@ def oauth2_authorization_code_flow(
     user = resolve_user(code)
     if not user:
         return None
-    payload = {"sub": user}
+    payload: dict[str, object] = {"sub": user}
     if scopes:
         payload["scopes"] = list(scopes)
     return create_jwt(payload, secret)
@@ -115,15 +151,19 @@ def oauth2_implicit_flow(
 ) -> str:
     """Directly issue token for *user* in implicit flow."""
 
-    payload = {"sub": user}
+    payload: dict[str, object] = {"sub": user}
     if scopes:
         payload["scopes"] = list(scopes)
     return create_jwt(payload, secret)
 
 
 __all__ = [
+    "HTTPBasicCredentials",
+    "HTTPAuthorizationCredentials",
     "parse_basic_auth",
+    "http_basic",
     "get_bearer_token",
+    "http_bearer",
     "get_api_key",
     "oauth2_password_flow",
     "oauth2_client_credentials_flow",

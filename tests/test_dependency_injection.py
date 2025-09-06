@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
+from typing import Any
 
 from forzium import ForziumApp, TestClient
 from forzium.dependency import Depends
@@ -146,3 +147,85 @@ def test_dependency_overrides() -> None:
     app.dependency_overrides[provide_token] = lambda: "app"
     resp = client.get("/api/token")
     assert resp.json() == {"token": "app"}
+
+
+def test_nested_dependencies() -> None:
+    def get_token() -> str:
+        return "inner"
+
+    def wrap(token: str = Depends(get_token)) -> str:
+        return f"wrapped:{token}"
+
+    app = ForziumApp()
+
+    @app.get("/nested")
+    def handler(value: str = Depends(wrap)) -> dict[str, str]:
+        return {"token": value}
+
+    client = TestClient(app)
+    resp = client.get("/nested")
+    assert resp.json() == {"token": "wrapped:inner"}
+
+
+def test_yield_dependencies() -> None:
+    called: list[str] = []
+
+    def gen_dep() -> Any:
+        called.append("enter")
+        try:
+            yield "gen"
+        finally:
+            called.append("exit")
+
+    app = ForziumApp()
+
+    @app.get("/gen")
+    def handler(token: str = Depends(gen_dep)) -> dict[str, str]:
+        return {"token": token}
+
+    route = app.routes[0]
+    handler_fn = app._make_handler(
+        route["func"],
+        route["param_names"],
+        route["param_converters"],
+        route["query_params"],
+        route["expects_body"],
+        route["dependencies"],
+    )
+    status, body, headers = handler_fn(b"", tuple(), b"")
+    assert status == 200
+    assert body == '{"token": "gen"}'
+    assert headers == {}
+    assert called == ["enter", "exit"]
+
+
+def test_async_yield_dependencies() -> None:
+    called: list[str] = []
+
+    async def agen_dep() -> Any:
+        called.append("enter")
+        try:
+            yield "agen"
+        finally:
+            called.append("exit")
+
+    app = ForziumApp()
+
+    @app.get("/agen")
+    def handler(token: str = Depends(agen_dep)) -> dict[str, str]:
+        return {"token": token}
+
+    route = app.routes[0]
+    handler_fn = app._make_handler(
+        route["func"],
+        route["param_names"],
+        route["param_converters"],
+        route["query_params"],
+        route["expects_body"],
+        route["dependencies"],
+    )
+    status, body, headers = handler_fn(b"", tuple(), b"")
+    assert status == 200
+    assert body == '{"token": "agen"}'
+    assert headers == {}
+    assert called == ["enter", "exit"]

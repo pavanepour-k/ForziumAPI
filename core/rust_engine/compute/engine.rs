@@ -104,12 +104,12 @@ mod tests {
 
     #[test]
     fn multiply_works() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let engine = ComputeEngine::new();
-            let params = PyDict::new_bound(py);
+            let params = PyDict::new(py);
             params.set_item("factor", 2.0).unwrap();
             let result = engine
-                .compute(py, vec![vec![1.0, 2.0]], "multiply", &params)
+                .compute(py, vec![vec![1.0, 2.0]], "multiply", &params, None)
                 .unwrap();
             assert_eq!(result, vec![vec![2.0, 4.0]]);
         });
@@ -117,11 +117,11 @@ mod tests {
 
     #[test]
     fn unsupported_op_errors() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let engine = ComputeEngine::new();
-            let params = PyDict::new_bound(py);
+            let params = PyDict::new(py);
             let err = engine
-                .compute(py, vec![vec![1.0]], "nope", &params)
+                .compute(py, vec![vec![1.0]], "nope", &params, None)
                 .unwrap_err();
             assert!(err.is_instance_of::<pyo3::exceptions::PyRuntimeError>(py));
         });

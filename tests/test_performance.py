@@ -6,17 +6,18 @@ import tracemalloc
 
 import pytest
 
+from scripts.run_benchmarks import run_benchmark  # type: ignore[import]
+from tests.http_client import get
+
 pytest.importorskip("forzium_engine")
 import forzium_engine  # noqa: E402
-from forzium_engine import ComputeRequestSchema, ForziumHttpServer  # noqa: E402
-
-from scripts.run_benchmarks import run_benchmark  # type: ignore[import]
-from tests.http_client import get  # noqa: E402
+from forzium_engine import ComputeRequestSchema  # noqa: E402
+from forzium_engine import ForziumHttpServer  # noqa: E402
 
 
 def start_server(port: int) -> ForziumHttpServer:
     server = ForziumHttpServer()
-    server.serve(f"127.0.0.1:{port}")
+    server.serve(f"127.0.0.1:{port}")  # type: ignore[attr-defined]
     time.sleep(0.2)
     return server
 
@@ -43,7 +44,7 @@ def test_high_load_health_requests():
         assert avg < 0.1
         assert peak - current < 9_000_000
     finally:
-        server.shutdown()
+        server.shutdown()  # type: ignore[attr-defined]
 
 
 def test_ffi_overhead_validation():
@@ -62,7 +63,9 @@ def test_ffi_overhead_validation():
 
 
 def _py_matmul(a, b):
-    return [[sum(x * y for x, y in zip(row, col)) for col in zip(*b)] for row in a]
+    return [
+        [sum(x * y for x, y in zip(row, col)) for col in zip(*b)] for row in a
+    ]  # noqa: E501
 
 
 def test_matmul_parallel_speed():
@@ -84,4 +87,4 @@ def test_memory_benchmark() -> None:
         stats = run_benchmark(duration=1, concurrency=1)
         assert stats["max_rss_kb"] < 900 * 1024
     finally:
-        server.shutdown()
+        server.shutdown()  # type: ignore[attr-defined]

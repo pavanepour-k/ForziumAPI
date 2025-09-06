@@ -1,14 +1,24 @@
 [package]
 name = "forzium_engine"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+build = "build.rs"
+license = "MIT"
 
 [lib]
 name = "forzium_engine"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = { version = "0.25.1", features = ["abi3-py311", "extension-module", "auto-initialize"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-hyper = { version = "0.14", features = ["full"] }
-thiserror = "1"
+pyo3 = { version = "0.26.0", features = ["abi3-py311", "auto-initialize"] }
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net"] }
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["server", "tokio", "http1"] }
+http-body-util = "0.1"
+thiserror = "2.0.16"
+
+[build-dependencies]
+pyo3-build-config = "0.26.0"
+
+[features]
+extension-module = ["pyo3/extension-module"]

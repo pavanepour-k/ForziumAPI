@@ -3,26 +3,22 @@
 import json
 from typing import Any, Dict, Tuple
 
+from core.service.orchestration_service import run_computation, stream_computation
 from forzium import ComputeRequest, ForziumApp
 from forzium_engine import ForziumHttpServer
-from core.service.orchestration_service import (
-    run_computation,
-    stream_computation,
-)
-
 
 server = ForziumHttpServer()
 app = ForziumApp(server)
 
 
 @app.get("/health")
-def health() -> dict:
+def health() -> dict[str, str]:
     """Simple liveness check for the service"""
     return {"status": "ok"}
 
 
 @app.post("/compute")
-def compute(payload: dict) -> dict[str, Any] | Tuple[int, Dict[str, str]]:
+def compute(payload: dict[str, Any]) -> dict[str, Any] | Tuple[int, Dict[str, str]]:
     """Execute a basic computation on the provided matrix"""
     try:
         req = ComputeRequest(**payload)
@@ -32,7 +28,7 @@ def compute(payload: dict) -> dict[str, Any] | Tuple[int, Dict[str, str]]:
 
 
 @app.post("/stream")
-def stream(payload: dict) -> str | Tuple[int, Dict[str, str]]:
+def stream(payload: dict[str, Any]) -> str | Tuple[int, Dict[str, str]]:
     """Stream computation results row by row as JSON lines"""
     try:
         req = ComputeRequest(**payload)

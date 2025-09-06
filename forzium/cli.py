@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-"""Developer command line interface for Forzium."""
-
 import argparse
 import json
 import os
+import pkgutil
 import subprocess
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
-import pkgutil
+from types import ModuleType
 
 
 def _run(cmd: list[str]) -> None:
@@ -45,13 +44,13 @@ def scaffold_plugin(path: str, name: str) -> None:
     (target / "pyproject.toml").write_text(
         "[project]\n"
         f'name = "{name}"\n'
-        'version = "0.1.0"\n'
+        'version = "0.1.1"\n'
         '[project.entry-points."forzium.plugins"]\n'
         f"{name} = '{name}:register'\n"
     )
 
 
-def _cmd_bench(args) -> None:
+def _cmd_bench(args: argparse.Namespace) -> None:
     """Run tensor benchmarks and print JSON metrics."""
 
     from core.service import gpu
@@ -65,7 +64,8 @@ def _cmd_bench(args) -> None:
     print(json.dumps(metrics, indent=2))
 
 
-def _load_plugins(sub) -> None:
+def _load_plugins(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    plugins: ModuleType | None
     try:
         import forzium.plugins as plugins
     except Exception:

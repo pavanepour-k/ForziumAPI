@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from forzium import ForziumApp, TestClient, TemplateRenderer
+from forzium import ForziumApp, TemplateRenderer, TestClient
 from forzium.middleware import SessionMiddleware
 
 

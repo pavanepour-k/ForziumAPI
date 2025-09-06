@@ -1,7 +1,8 @@
 """Tests for machine learning inference bindings."""
 
-from forzium_engine import LinearModel
 import pytest
+
+from forzium_engine import LinearModel
 
 
 def test_linear_model_prediction(tmp_path) -> None:

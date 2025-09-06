@@ -1,9 +1,12 @@
+# ruff: noqa: E402
 """Test gRPC health check service."""
 
-import grpc
+import pytest
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from interfaces.grpc.server import start_grpc_server
+
+grpc = pytest.importorskip("grpc")
 
 
 def test_grpc_health() -> None:

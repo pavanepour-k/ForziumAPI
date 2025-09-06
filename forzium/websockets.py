@@ -10,9 +10,7 @@ from infrastructure.monitoring import start_span
 class WebSocket:
     """In-memory stand-in for a WebSocket connection."""
 
-    def __init__(
-        self, on_close: Callable[["WebSocket"], Any] | None = None
-    ) -> None:
+    def __init__(self, on_close: Callable[["WebSocket"], Any] | None = None) -> None:
         self.accepted = False
         self.sent: list[str] = []
         self.received: list[str] = []
@@ -21,9 +19,7 @@ class WebSocket:
         if on_close is not None:
             self._close_callbacks.append(on_close)
 
-    def add_close_callback(
-        self, callback: Callable[["WebSocket"], Any]
-    ) -> None:
+    def add_close_callback(self, callback: Callable[["WebSocket"], Any]) -> None:
         """Register *callback* to be invoked when closed."""
 
         self._close_callbacks.append(callback)
@@ -45,6 +41,7 @@ class WebSocket:
         self.closed = True
         for cb in list(self._close_callbacks):
             cb(self)
+
 
 class WebSocketRoute:
     """Bind a path to a WebSocket endpoint."""
@@ -103,7 +100,7 @@ __all__.extend(["BroadcastChannel", "ClusteredBroadcastChannel"])
 class WebSocketServer(BroadcastChannel):
     """Simple in-memory server handling multiple WebSocket clients."""
 
-    async def connect(self) -> WebSocket:
+    async def connect(self) -> WebSocket:  # type: ignore[override]
         """Create a WebSocket and register it with the server."""
 
         ws = WebSocket()

@@ -1,8 +1,9 @@
 """Tests for cancellation tokens and error propagation."""
 
-from interfaces.shared_types.cancellation import CancellationToken
-from core.service import orchestration_service as svc
 import pytest
+
+from core.service import orchestration_service as svc
+from interfaces.shared_types.cancellation import CancellationToken
 
 
 def test_run_computation_cancellation() -> None:

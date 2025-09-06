@@ -11,11 +11,10 @@ import pytest
 
 pytest.importorskip("forzium_engine")
 
-from forzium_engine import ForziumHttpServer  # noqa: E402
-
-from forzium import ForziumApp  # noqa: E402
-from tests.http_client import get, post  # noqa: E402
 from core.app import server  # noqa: E402
+from forzium import ForziumApp  # noqa: E402
+from forzium_engine import ForziumHttpServer  # noqa: E402
+from tests.http_client import get, post  # noqa: E402
 
 
 def start_core_server(port: int) -> ForziumHttpServer:

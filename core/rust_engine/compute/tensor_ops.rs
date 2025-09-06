@@ -39,9 +39,9 @@ pub fn add(m: &[Vec<f64>], addend: f64) -> Result<Vec<Vec<f64>>, ForziumError> {
 pub fn transpose(m: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
     let (rows, cols) = validate_matrix(m)?;
     let mut out = vec![vec![0.0; rows]; cols];
-    for r in 0..rows {
-        for c in 0..cols {
-            out[c][r] = m[r][c];
+    for (r, row) in m.iter().enumerate() {
+        for (c, val) in row.iter().enumerate() {
+            out[c][r] = *val;
         }
     }
     Ok(out)
@@ -54,10 +54,11 @@ pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumEr
         return Err(ForziumError::Validation("shape mismatch".into()));
     }
     let mut out = vec![vec![0.0; cols_b]; rows_a];
-    for i in 0..rows_a {
-        for k in 0..cols_a {
-            for j in 0..cols_b {
-                out[i][j] += a[i][k] * b[k][j];
+    for (row_a, out_row) in a.iter().zip(out.iter_mut()) {
+        for (k, val_a) in row_a.iter().enumerate() {
+            let row_b = &b[k];
+            for (out_cell, val_b) in out_row.iter_mut().zip(row_b.iter()) {
+                *out_cell += val_a * val_b;
             }
         }
     }
@@ -74,13 +75,13 @@ pub fn simd_matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Forz
     let mut out = vec![vec![0.0; cols_b]; rows_a];
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        for i in 0..rows_a {
-            for j in 0..cols_b {
+        for (row_a, out_row) in a.iter().zip(out.iter_mut()) {
+            for (bt_row, out_cell) in bt.iter().zip(out_row.iter_mut()) {
                 let mut k = 0;
                 let mut vsum = _mm_set1_pd(0.0);
                 while k + 2 <= cols_a {
-                    let va = _mm_loadu_pd(a[i].as_ptr().add(k));
-                    let vb = _mm_loadu_pd(bt[j].as_ptr().add(k));
+                    let va = _mm_loadu_pd(row_a.as_ptr().add(k));
+                    let vb = _mm_loadu_pd(bt_row.as_ptr().add(k));
                     let prod = _mm_mul_pd(va, vb);
                     vsum = _mm_add_pd(vsum, prod);
                     k += 2;
@@ -89,22 +90,22 @@ pub fn simd_matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Forz
                 _mm_storeu_pd(buf.as_mut_ptr(), vsum);
                 let mut sum = buf[0] + buf[1];
                 while k < cols_a {
-                    sum += a[i][k] * bt[j][k];
+                    sum += row_a[k] * bt_row[k];
                     k += 1;
                 }
-                out[i][j] = sum;
+                *out_cell = sum;
             }
         }
     }
     #[cfg(not(target_arch = "x86_64"))]
     {
-        for i in 0..rows_a {
-            for j in 0..cols_b {
+        for (row_a, out_row) in a.iter().zip(out.iter_mut()) {
+            for (bt_row, out_cell) in bt.iter().zip(out_row.iter_mut()) {
                 let mut sum = 0.0;
-                for k in 0..cols_a {
-                    sum += a[i][k] * b[k][j];
+                for (val_a, val_b) in row_a.iter().zip(bt_row.iter()) {
+                    sum += val_a * val_b;
                 }
-                out[i][j] = sum;
+                *out_cell = sum;
             }
         }
     }
@@ -114,9 +115,9 @@ pub fn simd_matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Forz
 pub fn elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
     let (rows, cols) = validate_same_shape(a, b)?;
     let mut out = vec![vec![0.0; cols]; rows];
-    for r in 0..rows {
-        for c in 0..cols {
-            out[r][c] = a[r][c] + b[r][c];
+    for (row_out, (row_a, row_b)) in out.iter_mut().zip(a.iter().zip(b.iter())) {
+        for (val_out, (val_a, val_b)) in row_out.iter_mut().zip(row_a.iter().zip(row_b.iter())) {
+            *val_out = val_a + val_b;
         }
     }
     Ok(out)
@@ -144,9 +145,10 @@ pub fn simd_elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f6
     }
     #[cfg(not(target_arch = "x86_64"))]
     {
-        for r in 0..rows {
-            for c in 0..cols {
-                out[r][c] = a[r][c] + b[r][c];
+        for (row_out, (row_a, row_b)) in out.iter_mut().zip(a.iter().zip(b.iter())) {
+            for (val_out, (val_a, val_b)) in row_out.iter_mut().zip(row_a.iter().zip(row_b.iter()))
+            {
+                *val_out = val_a + val_b;
             }
         }
     }
@@ -156,9 +158,9 @@ pub fn simd_elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f6
 pub fn hadamard(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
     let (rows, cols) = validate_same_shape(a, b)?;
     let mut out = vec![vec![0.0; cols]; rows];
-    for r in 0..rows {
-        for c in 0..cols {
-            out[r][c] = a[r][c] * b[r][c];
+    for (row_out, (row_a, row_b)) in out.iter_mut().zip(a.iter().zip(b.iter())) {
+        for (val_out, (val_a, val_b)) in row_out.iter_mut().zip(row_a.iter().zip(row_b.iter())) {
+            *val_out = val_a * val_b;
         }
     }
     Ok(out)

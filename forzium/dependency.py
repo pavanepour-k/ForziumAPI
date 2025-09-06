@@ -4,18 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import cgi
+import inspect
 import json
-import mimetypes
-import os
 from http.cookies import SimpleCookie
+from typing import Any, AsyncIterator, Callable, Dict, List, Mapping, Tuple, cast
 from urllib.parse import parse_qs, urlsplit
-from typing import (
-    Any,
-    AsyncIterator,
-    Callable,
-    Iterable,
-    Mapping,
-)
 
 
 class Request:
@@ -35,8 +28,9 @@ class Request:
         self.headers = {k.lower(): v for k, v in (headers or {}).items()}
         self.path_params = dict(path_params or {})
         parts = urlsplit(url)
+        parsed_items = parse_qs(parts.query).items()
         self.query_params = {
-            k: v[0] if len(v) == 1 else v for k, v in parse_qs(parts.query).items()
+            k: (v[0] if len(v) == 1 else v) for k, v in parsed_items  # noqa: E501
         }
         self._cookies: dict[str, str] | None = None
         self._form_data: dict[str, Any] | None = None
@@ -63,7 +57,9 @@ class Request:
         data = await self.body()
         ctype = self.headers.get("content-type", "")
         if ctype.startswith("multipart/form-data") or data.startswith(b"--"):
-            boundary = ctype.split("boundary=")[-1] if "boundary=" in ctype else ""
+            boundary = (
+                ctype.split("boundary=")[-1] if "boundary=" in ctype else ""
+            )  # noqa: E501
             if not boundary:
                 line = data.split(b"\r\n", 1)[0]
                 if line.startswith(b"--"):
@@ -89,7 +85,10 @@ class Request:
                     filename = params.get("filename")
                     content = content.rstrip(b"\r\n")
                     if filename:
-                        files[name] = {"filename": filename, "content": content}
+                        files[name] = {
+                            "filename": filename,
+                            "content": content,
+                        }
                     else:
                         form[name] = content.decode()
             self._form_data = form
@@ -113,7 +112,7 @@ class Request:
         """Lazily parse cookies from the request headers."""
         if self._cookies is None:
             raw = self.headers.get("cookie", "")
-            jar = SimpleCookie()
+            jar: SimpleCookie = SimpleCookie()
             jar.load(raw)
             self._cookies = {k: morsel.value for k, morsel in jar.items()}
         return self._cookies
@@ -130,6 +129,71 @@ class Depends:
 
     def __init__(self, dependency: Callable[..., Any]) -> None:
         self.dependency = dependency
+
+
+def solve_dependencies(
+    dependencies: List[Tuple[str, Callable[..., Any]]],
+    overrides: List[Dict[Callable[..., Any], Callable[..., Any]]],
+) -> tuple[dict[str, Any], list[Tuple[Callable[[], Any], bool]]]:
+    """Resolve *dependencies* applying override mappings.
+
+    Returns a tuple of ``(values, cleanup)`` where ``values`` maps parameter
+    names to resolved values and ``cleanup`` contains callables executed after
+    the request to tear down context managers or generators.
+    """
+
+    cache: Dict[Callable[..., Any], Any] = {}
+    cleanup: list[Tuple[Callable[[], Any], bool]] = []
+
+    def resolve(fn: Callable[..., Any]) -> Any:
+        actual = fn
+        for mapping in overrides:
+            if fn in mapping:
+                actual = mapping[fn]
+        if actual in cache:
+            return cache[actual]
+        sig = inspect.signature(actual)
+        kwargs: dict[str, Any] = {}
+        for param in sig.parameters.values():
+            default = param.default
+            if isinstance(default, Depends):
+                kwargs[param.name] = resolve(default.dependency)
+        result = actual(**kwargs)
+        if inspect.isawaitable(result):
+            result = asyncio.run(cast(Any, result))
+        elif inspect.isasyncgen(result):
+            gen = cast(Any, result)
+            value = asyncio.run(gen.__anext__())
+            cleanup.append((gen.aclose, True))
+            result = value
+        elif inspect.isgenerator(result):
+            gen = cast(Any, result)
+            value = next(gen)
+            cleanup.append((gen.close, False))
+            result = value
+        elif hasattr(result, "__aenter__") and hasattr(result, "__aexit__"):
+            cm = result
+            value = asyncio.run(cast(Any, cm.__aenter__()))
+
+            def _async_exit(cm: Any = cm) -> Any:
+                return cm.__aexit__(None, None, None)
+
+            cleanup.append((_async_exit, True))
+            result = value
+        elif hasattr(result, "__enter__") and hasattr(result, "__exit__"):
+            cm = result
+            value = cm.__enter__()
+            
+            def _sync_exit(cm: Any = cm) -> None:
+                cm.__exit__(None, None, None)
+
+            cleanup.append((_sync_exit, False))
+            result = value
+        cache[actual] = result
+        return result
+
+    values = {name: resolve(dep) for name, dep in dependencies}
+    return values, cleanup
 
 
 class BackgroundTask:
@@ -194,7 +258,7 @@ class Response:
         self.headers = {k.lower(): v for k, v in (headers or {}).items()}
         self.media_type = media_type or default_type
         self.headers.setdefault("content-type", self.media_type)
-        self._cookies = SimpleCookie()
+        self._cookies: SimpleCookie = SimpleCookie()
         self.background = background
 
     def set_header(self, key: str, value: str) -> None:
@@ -229,4 +293,5 @@ __all__ = [
     "Depends",
     "Request",
     "Response",
+    "solve_dependencies",
 ]

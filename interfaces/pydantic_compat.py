@@ -10,7 +10,8 @@ FieldValidator = Callable[[type, Any], Any]
 
 
 def model_validator(
-    *, mode: str = "before",
+    *,
+    mode: str = "before",
 ) -> Callable[[Validator], classmethod]:
     """Decorator to register class-level validators."""
 
@@ -27,10 +28,7 @@ def field_validator(
     """Decorator to register field-level validators."""
 
     def decorator(func: FieldValidator) -> classmethod:
-        func.__forzium_field_validator__ = (
-            field,
-            mode,
-        )  # type: ignore[attr]
+        func.__forzium_field_validator__ = (field, mode)  # type: ignore[attr-defined]
         return classmethod(func)
 
     return decorator
@@ -55,15 +53,13 @@ class BaseModel:
             fv = getattr(func, "__forzium_field_validator__", None)
             if fv is not None:
                 field, fmode = fv
-                cls._field_validators.setdefault(field, []).append(
-                    (fmode, func)
-                )
-        cls.__init__ = BaseModel.__init__  # ensure custom init
+                cls._field_validators.setdefault(field, []).append((fmode, func))
+        setattr(cls, "__init__", BaseModel.__init__)  # ensure custom init
 
     def __init__(self, **data: Any) -> None:
         raw = dict(data)
         values: Dict[str, Any] = {}
-        for f in fields(self):
+        for f in fields(self):  # type: ignore[arg-type]
             if f.name in raw:
                 values[f.name] = raw[f.name]
             elif f.default is not MISSING:
@@ -75,7 +71,7 @@ class BaseModel:
         for mode, validator in self._model_validators:
             if mode == "before":
                 values = validator(self.__class__, values)
-        for f in fields(self):
+        for f in fields(self):  # type: ignore[arg-type]
             val = values[f.name]
             for mode, func in self._field_validators.get(f.name, []):
                 if mode == "before":
@@ -92,7 +88,7 @@ class BaseModel:
     def dict(self) -> Dict[str, Any]:  # pragma: no cover - simple
         return {
             field.name: getattr(self, field.name) for field in fields(self)
-        }
+        }  # type: ignore[arg-type]
 
     def model_dump(self) -> Dict[str, Any]:  # pragma: no cover - alias
         return self.dict()
@@ -118,7 +114,7 @@ class BaseModel:
 
         props: Dict[str, Any] = {}
         required: List[str] = []
-        for f in fields(cls):
+        for f in fields(cls):  # type: ignore[arg-type]
             sch = type_schema(f.type)
             if f.default is not MISSING:
                 sch["default"] = f.default

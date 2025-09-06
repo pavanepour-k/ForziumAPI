@@ -11,7 +11,6 @@ import sqlite3
 import time
 from typing import Any, Dict, Iterable, List
 
-
 _revoked_tokens: set[str] = set()
 
 DB_PATH = os.getenv("FORZIUM_RBAC_DB", "rbac.db")

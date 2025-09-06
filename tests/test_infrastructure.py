@@ -2,10 +2,7 @@
 
 import json
 
-"""Infrastructure utilities covering config, deploy, and telemetry."""
-
-import json
-
+import forzium_engine
 from infrastructure.configuration import load_settings
 from infrastructure.deployment import build, run
 from infrastructure.monitoring import (
@@ -18,7 +15,6 @@ from infrastructure.monitoring import (
     setup_tracing,
     start_span,
 )
-import forzium_engine
 
 
 def test_load_settings_env(monkeypatch) -> None:
@@ -118,8 +114,14 @@ def test_otlp_trace_export(monkeypatch) -> None:
 
         return Dummy()
 
-    monkeypatch.setattr("infrastructure.monitoring.request.urlopen", fake_urlopen)
-    monkeypatch.setattr("infrastructure.monitoring._otlp_endpoint", "http://example")
+    monkeypatch.setattr(
+        "infrastructure.monitoring.request.urlopen",
+        fake_urlopen,
+    )
+    monkeypatch.setattr(
+        "infrastructure.monitoring._otlp_endpoint",
+        "http://example",
+    )
     setup_tracing()
     with start_span("export"):
         pass

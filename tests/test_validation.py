@@ -1,6 +1,7 @@
 """Validation performance comparisons."""
 
 import pytest
+
 from forzium import ComputeRequest
 from interfaces.shared_types.compute_request import ComputeRequestModel
 

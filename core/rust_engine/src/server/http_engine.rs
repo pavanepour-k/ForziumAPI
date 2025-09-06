@@ -1,5 +1,8 @@
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server};
+use http_body_util::{BodyExt, Full};
+use hyper::service::service_fn;
+use hyper::{body::Bytes, body::Incoming, Method, Request, Response};
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto::Builder;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
 use std::collections::HashMap;
@@ -7,6 +10,7 @@ use std::net::SocketAddr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 
@@ -38,7 +42,7 @@ struct Route {
 
 impl Clone for Route {
     fn clone(&self) -> Self {
-        Python::with_gil(|py| Self {
+        Python::attach(|py| Self {
             pattern: self.pattern.clone(),
             handler: self.handler.clone_ref(py),
         })
@@ -95,7 +99,8 @@ impl ForziumHttpServer {
                 .parse::<SocketAddr>()
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
             let routes = self.routes.clone();
-            let (tx, rx) = oneshot::channel();
+            let keep_alive = self.keep_alive;
+            let (tx, mut rx) = oneshot::channel();
             let thread = std::thread::spawn(move || {
                 let rt = match Runtime::new() {
                     Ok(rt) => rt,
@@ -105,21 +110,36 @@ impl ForziumHttpServer {
                     }
                 };
                 rt.block_on(async move {
-                    let make_svc = make_service_fn(move |_conn| {
-                        let routes = routes.clone();
-                        async move {
-                            Ok::<_, hyper::Error>(service_fn(move |req| {
-                                handle_request(req, routes.clone())
-                            }))
+                    let listener = match TcpListener::bind(addr).await {
+                        Ok(l) => l,
+                        Err(e) => {
+                            eprintln!("bind error: {e}");
+                            return;
                         }
-                    });
-                    let builder = Server::bind(&addr);
-                    let server = builder.serve(make_svc);
-                    let graceful = server.with_graceful_shutdown(async {
-                        let _ = rx.await;
-                    });
-                    if let Err(err) = graceful.await {
-                        eprintln!("server error: {err}");
+                    };
+                    let builder = Builder::new(TokioExecutor::new());
+                    loop {
+                        tokio::select! {
+                            _ = &mut rx => break,
+                            accept = listener.accept() => {
+                                let (stream, _) = match accept {
+                                    Ok(s) => s,
+                                    Err(e) => { eprintln!("accept error: {e}"); continue; }
+                                };
+                                let routes = routes.clone();
+                                let mut http_builder = builder.clone();
+                                if keep_alive.is_some() {
+                                    http_builder.http1().keep_alive(true);
+                                }
+                                tokio::spawn(async move {
+                                    let io = TokioIo::new(stream);
+                                    let service = service_fn(move |req| handle_request(req, routes.clone()));
+                                    if let Err(err) = http_builder.serve_connection(io, service).await {
+                                        eprintln!("server error: {err}");
+                                    }
+                                });
+                            }
+                        }
                     }
                 });
             });
@@ -151,9 +171,9 @@ impl ForziumHttpServer {
 }
 
 async fn handle_request(
-    req: Request<Body>,
+    req: Request<Incoming>,
     routes: Arc<Mutex<HashMap<Method, Vec<Route>>>>,
-) -> Result<Response<Body>, hyper::Error> {
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
     let query = req.uri().query().unwrap_or("").to_string();
@@ -170,8 +190,8 @@ async fn handle_request(
             Err(_) => {
                 return Ok(Response::builder()
                     .status(500)
-                    .body(Body::from("{\"detail\":\"server error\"}"))
-                    .unwrap_or_else(|_| Response::new(Body::empty())));
+                    .body(Full::from("{\"detail\":\"server error\"}"))
+                    .unwrap());
             }
         }
     };
@@ -179,7 +199,7 @@ async fn handle_request(
         for route in routes_for_method.iter() {
             match match_route(&route.pattern, &path_segments) {
                 Match::Ok(params) => {
-                    let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
+                    let body_bytes = req.into_body().collect().await?.to_bytes();
                     let response =
                         call_handler(&route.handler, &route.pattern, params, body_bytes, &query)
                             .await;
@@ -188,31 +208,30 @@ async fn handle_request(
                 Match::BadRequest => {
                     return Ok(Response::builder()
                         .status(400)
-                        .body(Body::from("{\"detail\":\"bad request\"}"))
-                        .unwrap_or_else(|_| Response::new(Body::empty())));
+                        .body(Full::from("{\"detail\":\"bad request\"}"))
+                        .unwrap());
                 }
-                Match::NoMatch => {}
+                Match::Miss => {}
             }
         }
     }
 
     // fallback health endpoint
     if method == Method::GET && path == "/health" {
-        let body = Body::from("{\"status\":\"ok\"}");
-        return Ok(Response::new(body));
+        return Ok(Response::new(Full::from("{\"status\":\"ok\"}")));
     }
 
     Ok(Response::builder()
         .status(404)
-        .body(Body::empty())
-        .unwrap_or_else(|_| Response::new(Body::empty())))
+        .body(Full::from("{\"detail\":\"not found\"}"))
+        .unwrap())
 }
 
 /// Result of attempting to match a path to a route pattern.
 enum Match {
     Ok(Vec<String>),
     BadRequest,
-    NoMatch,
+    Miss,
 }
 
 /// Parse a path template into segments.
@@ -243,14 +262,14 @@ fn parse_pattern(path: &str) -> PyResult<Vec<Segment>> {
 /// Attempt to match segments against a pattern, returning captured params.
 fn match_route(pattern: &[Segment], path: &[&str]) -> Match {
     if pattern.len() != path.len() {
-        return Match::NoMatch;
+        return Match::Miss;
     }
     let mut params = Vec::new();
     for (seg, part) in pattern.iter().zip(path.iter()) {
         match seg {
             Segment::Static(s) => {
                 if s != part {
-                    return Match::NoMatch;
+                    return Match::Miss;
                 }
             }
             Segment::Param { ty, .. } => match ty {
@@ -272,13 +291,13 @@ async fn call_handler(
     handler: &Py<PyAny>,
     pattern: &[Segment],
     params: Vec<String>,
-    body: hyper::body::Bytes,
+    body: Bytes,
     query: &str,
-) -> Response<Body> {
+) -> Response<Full<Bytes>> {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        Python::with_gil(|py| -> PyResult<PyObject> {
+        Python::attach(|py| -> PyResult<Py<PyAny>> {
             let py_body = PyBytes::new(py, &body);
-            let mut objs: Vec<PyObject> = Vec::new();
+            let mut objs: Vec<Py<PyAny>> = Vec::new();
             for (seg, val) in pattern
                 .iter()
                 .filter_map(|s| match s {
@@ -293,7 +312,7 @@ async fn call_handler(
                         objs.push(v.into_pyobject(py)?.unbind().into());
                     }
                     ParamType::Str => {
-                        objs.push(val.into_pyobject(py)?.unbind().into());
+                        objs.push(val.clone().into_pyobject(py)?.unbind().into());
                     }
                 }
             }
@@ -303,34 +322,38 @@ async fn call_handler(
         })
     }));
     match result {
-        Ok(Ok(obj)) => Python::with_gil(|py| -> PyResult<Response<Body>> {
-            let (status, body): (u16, String) = obj.extract(py)?;
-            Ok(Response::builder()
+        Ok(Ok(obj)) => match extract_status_body(obj) {
+            Ok((status, body)) => Response::builder()
                 .status(status)
                 .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap())
-        })
-        .unwrap_or_else(|e| {
-            eprintln!("handler error: {e}");
-            Response::builder()
-                .status(500)
-                .body(Body::from("{\"detail\":\"server error\"}"))
-                .unwrap()
-        }),
+                .body(Full::from(body))
+                .unwrap(),
+            Err(e) => {
+                eprintln!("handler error: {e}");
+                Response::builder()
+                    .status(500)
+                    .body(Full::from("{\"detail\":\"server error\"}"))
+                    .unwrap()
+            }
+        },
         Ok(Err(e)) => {
             eprintln!("handler error: {e}");
             Response::builder()
                 .status(500)
-                .body(Body::from("{\"detail\":\"server error\"}"))
+                .body(Full::from("{\"detail\":\"server error\"}"))
                 .unwrap()
         }
         Err(_) => {
             eprintln!("handler panic");
             Response::builder()
                 .status(500)
-                .body(Body::from("{\"detail\":\"server error\"}"))
+                .body(Full::from("{\"detail\":\"server error\"}"))
                 .unwrap()
         }
     }
+}
+
+/// Extract response status code and body from a Python object.
+fn extract_status_body(obj: Py<PyAny>) -> PyResult<(u16, String)> {
+    Python::attach(|py| obj.bind(py).extract())
 }

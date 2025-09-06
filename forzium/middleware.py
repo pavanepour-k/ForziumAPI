@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import hashlib
 import hmac
 import json
-import gzip
-import os
+import mimetypes
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -98,7 +98,11 @@ class SessionMiddleware(BaseHTTPMiddleware):
     def _decode(self, value: str) -> None:
         try:
             raw, sig = value.split(".")
-            expected = hmac.new(self.secret, raw.encode(), hashlib.sha256).hexdigest()
+            expected = hmac.new(
+                self.secret,
+                raw.encode(),
+                hashlib.sha256,
+            ).hexdigest()
             if not hmac.compare_digest(sig, expected):
                 return
             decoded = base64.urlsafe_b64decode(raw.encode()).decode()
@@ -124,8 +128,14 @@ class SessionMiddleware(BaseHTTPMiddleware):
     def after_response(
         self, status: int, body: str, headers: dict[str, str]
     ) -> tuple[int, str, dict[str, str]]:
-        raw = base64.urlsafe_b64encode(json.dumps(self.data).encode()).decode()
-        sig = hmac.new(self.secret, raw.encode(), hashlib.sha256).hexdigest()
+        raw = base64.urlsafe_b64encode(
+            json.dumps(self.data).encode(),
+        ).decode()
+        sig = hmac.new(
+            self.secret,
+            raw.encode(),
+            hashlib.sha256,
+        ).hexdigest()
         headers["set-cookie"] = f"{self.cookie_name}={raw}.{sig}"
         return status, body, headers
 
@@ -207,7 +217,8 @@ class JWTAuthMiddleware(JWTMiddleware):
         payload = decode_jwt(token, self.secret) if token else None
         if not isinstance(payload, dict):
             return body, params, query, (401, "unauthorized", {})
-        if any(scope not in payload.get("scopes", []) for scope in self.scopes):
+        scopes = payload.get("scopes", [])
+        if any(scope not in scopes for scope in self.scopes):
             return body, params, query, (403, "forbidden", {})
         user = payload.get("user")
         params = (user, *params)
@@ -238,6 +249,33 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         return status, body, headers
 
 
+class StaticFilesMiddleware(BaseHTTPMiddleware):
+    """Serve files under *prefix* from *directory*."""
+
+    def __init__(self, directory: str, prefix: str = "/static") -> None:
+        self.directory = Path(directory)
+        self.prefix = prefix.strip("/")
+
+    def before_request(
+        self, body: bytes, params: tuple, query: bytes
+    ) -> tuple[bytes, tuple, bytes, tuple[int, str, dict[str, str]] | None]:
+        if not params:
+            return body, params, query, None
+        path = str(params[0])
+        if not path.startswith(self.prefix + "/"):
+            return body, params, query, None
+        rel_path = path[len(self.prefix) + 1 :]
+        file_path = self.directory / rel_path
+        if file_path.is_dir():
+            file_path = file_path / "index.html"
+        if not file_path.exists():
+            return body, params, query, (404, "not found", {})
+        content = file_path.read_text()
+        media_type = mimetypes.guess_type(str(file_path))[0] or "text/plain"
+        headers = {"content-type": media_type}
+        return body, params, query, (200, content, headers)
+
+
 __all__ = [
     "BaseHTTPMiddleware",
     "CORSMiddleware",
@@ -249,4 +287,5 @@ __all__ = [
     "JWTMiddleware",
     "JWTAuthMiddleware",
     "LoggingMiddleware",
+    "StaticFilesMiddleware",
 ]

@@ -10,8 +10,8 @@ from .middleware import JWTAuthMiddleware
 from .security import (
     assign_role,
     define_role,
-    get_audit_log,
     delete_role,
+    get_audit_log,
     list_roles,
     list_user_roles,
     remove_role,
@@ -26,7 +26,7 @@ router.add_middleware(
 
 
 @router.post("/roles")
-def create_role(payload: dict) -> dict[str, str]:
+def create_role(payload: dict[str, Any]) -> dict[str, str]:
     """Create a role with optional permissions."""
 
     name = payload.get("name", "")
@@ -51,7 +51,7 @@ def delete_role_endpoint(name: str) -> dict[str, str]:
 
 
 @router.post("/assign")
-def add_role(payload: dict) -> dict[str, str]:
+def add_role(payload: dict[str, Any]) -> dict[str, str]:
     """Assign a role to a user."""
 
     assign_role(payload.get("user", ""), payload.get("role", ""))
@@ -59,7 +59,7 @@ def add_role(payload: dict) -> dict[str, str]:
 
 
 @router.delete("/assign")
-def delete_role_assignment(payload: dict) -> dict[str, str]:
+def delete_role_assignment(payload: dict[str, Any]) -> dict[str, str]:
     """Remove a role from a user."""
 
     remove_role(payload.get("user", ""), payload.get("role", ""))

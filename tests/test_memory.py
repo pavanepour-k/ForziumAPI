@@ -1,8 +1,9 @@
 """Tests for memory management bindings."""
 
-from core.service import orchestration_service as svc, orchestration_service
 import tracemalloc
 
+from core.service import orchestration_service
+from core.service import orchestration_service as svc
 
 def test_force_gc_exists():
     assert hasattr(svc.forzium_engine, "force_gc")

@@ -1,6 +1,7 @@
 """Tests for WebSocket broadcast channels."""
 
 import asyncio
+
 from forzium.websockets import BroadcastChannel, WebSocket
 
 

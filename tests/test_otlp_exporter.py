@@ -1,6 +1,7 @@
+"""OTLP exporter tests."""
+
 from urllib import error, request
 
-import json
 from infrastructure.monitoring.otlp_exporter import OTLPBatchExporter
 
 

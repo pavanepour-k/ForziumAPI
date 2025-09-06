@@ -6,7 +6,6 @@ import pytest
 
 pytest.importorskip("forzium_engine")
 from forzium_engine import ForziumHttpServer  # noqa: E402
-
 from tests.http_client import get  # noqa: E402
 
 

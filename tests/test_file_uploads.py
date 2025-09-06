@@ -3,8 +3,8 @@
 import asyncio
 
 from forzium import ForziumApp, Request
-from forzium.testclient import TestClient
 from forzium.responses import StreamingResponse
+from forzium.testclient import TestClient
 
 
 def test_multipart_form() -> None:

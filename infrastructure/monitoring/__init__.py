@@ -1,22 +1,22 @@
 """Simple monitoring utilities with optional OpenTelemetry hooks."""
 
+import json
+import os
+import sqlite3
+import uuid
 from collections import defaultdict
 from contextlib import nullcontext
 from contextvars import ContextVar
-import json
-import os
-import uuid
-import sqlite3
 from typing import Dict, Iterable, Optional
 from urllib import request
 
 _exporter_choice = os.getenv("OTEL_TRACES_EXPORTER", "inmemory")
 
 try:  # pragma: no cover - optional dependency
-    from opentelemetry import metrics, trace
-    from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import (
+    from opentelemetry import metrics, trace  # type: ignore
+    from opentelemetry.sdk.metrics import MeterProvider  # type: ignore
+    from opentelemetry.sdk.trace import TracerProvider  # type: ignore
+    from opentelemetry.sdk.trace.export import (  # type: ignore
         ConsoleSpanExporter,
         InMemorySpanExporter,
         SimpleSpanProcessor,

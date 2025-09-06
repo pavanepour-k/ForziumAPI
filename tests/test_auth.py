@@ -2,18 +2,6 @@
 
 import base64
 
-from forzium.middleware import JWTAuthMiddleware, JWTMiddleware
-from forzium.security import (
-    authorize_scopes,
-    create_jwt,
-    decode_jwt,
-    is_token_revoked,
-    hash_password,
-    refresh_jwt,
-    revoke_token,
-    rotate_jwt,
-    verify_password,
-)
 from forzium.auth import (
     get_api_key,
     get_bearer_token,
@@ -22,6 +10,18 @@ from forzium.auth import (
     oauth2_implicit_flow,
     oauth2_password_flow,
     parse_basic_auth,
+)
+from forzium.middleware import JWTAuthMiddleware
+from forzium.security import (
+    authorize_scopes,
+    create_jwt,
+    decode_jwt,
+    hash_password,
+    is_token_revoked,
+    refresh_jwt,
+    revoke_token,
+    rotate_jwt,
+    verify_password,
 )
 
 

@@ -1,6 +1,7 @@
 """Ensure Rust panics surface as Python exceptions."""
 
 import pytest
+
 from forzium_engine import trigger_panic
 
 

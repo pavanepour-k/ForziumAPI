@@ -3,12 +3,12 @@
 import sqlite3
 
 from infrastructure.monitoring import (
+    get_traces,
+    persist_observability,
+    query_metric,
     record_latency,
     record_metric,
     start_span,
-    persist_observability,
-    get_traces,
-    query_metric,
 )
 
 

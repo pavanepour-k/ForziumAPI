@@ -1,6 +1,7 @@
 """Python wrappers around Rust validation schemas."""
 
 import json
+from typing import Any
 
 from forzium_engine import ComputeRequestSchema
 
@@ -16,7 +17,7 @@ class ComputeRequest:
         self.operation = validated["operation"]
         self.parameters = validated["parameters"]
 
-    def dict(self) -> dict:
+    def dict(self) -> dict[str, Any]:
         return {
             "data": self.data,
             "operation": self.operation,

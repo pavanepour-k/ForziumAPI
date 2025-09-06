@@ -6,6 +6,7 @@ use pyo3::types::PyType;
 use std::fs;
 
 /// Simple linear model with weights and bias.
+#[derive(Debug)]
 pub struct LinearModel {
     weights: Vec<f64>,
     bias: f64,

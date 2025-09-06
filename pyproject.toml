@@ -4,9 +4,10 @@ build-backend = "maturin"
 
 [project]
 name = "forzium_engine"
-version = "0.1.0"
-description = "FastAPI-compatible framework with a Rust core."
-authors = [{ name = "Forzium Team" }]
+version = "0.1.1"
+description = "ForziumAPI-compatible framework with a Rust core."
+authors = [{ name = "pavanepour-k" }]
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = []
 
@@ -16,19 +17,36 @@ manifest-path = "core/rust_engine/Cargo.toml"
 python-source = "."
 
 [tool.pytest.ini_options]
-addopts = "--cov=forzium --cov-report=term-missing"
+addopts = ""
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:cannot collect test class 'TestClient' because it has a __init__:pytest.PytestCollectionWarning",
+    "ignore:'cgi' is deprecated and slated for removal in Python 3.13:DeprecationWarning",
+]
 
 [tool.poetry]
 name = "forzium-engine"
-version = "0.1.0"
-description = "FastAPI-compatible framework with a Rust core."
-authors = ["Forzium Team"]
+version = "0.1.1"
+description = "ForziumAPI-compatible framework with a Rust core."
+authors = ["pavanepour-k"]
 package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.11"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-pytest-cov = "^6.0"
+pytest = "^8.4.2"
+pytest-cov = "^6.2.1"
+black = "^25.1.0"
+ruff = "^0.12.11"
+mypy = "^1.17.1"
+bandit = "^1.8.6"
+pip-audit = "^2.9.0"
+safety = "^3.6.1"
+mutmut = "^3.3.1"
+pytest-benchmark = "^5.1.0"
+pip-licenses = "^5.0.0"
+detect-secrets = "^1.5.0"
+
+[tool.mutmut]
+paths_to_mutate = ["forzium"]

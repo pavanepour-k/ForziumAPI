@@ -3,8 +3,8 @@ import sqlite3
 import subprocess
 import sys
 
-from forzium import cli
 import infrastructure.monitoring.otlp_exporter as exporter
+from forzium import cli
 
 
 def test_migrate_script(tmp_path) -> None:

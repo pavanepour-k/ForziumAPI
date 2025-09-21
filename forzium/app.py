@@ -1000,8 +1000,9 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 if name in param_names:
                     path_params.append((name, annotation))
                     continue
-                if name == "session":
-                    param_names.append(name)
+                if name in {"session", "user"}:
+                    if name not in param_names:
+                        param_names.append(name)
                     continue
                 if name == "request":
                     expects_request = True

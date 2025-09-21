@@ -244,7 +244,7 @@ class JWTMiddleware(BaseHTTPMiddleware):
         if self.require and not isinstance(payload, dict):
             return body, params, query, (401, "unauthorized", {})
         user = payload.get("user") if isinstance(payload, dict) else None
-        params = (user, *params)
+        params = (*params, user)
         query = (
             "&".join(f"{k}={v[0]}" for k, v in params_dict.items()).encode()
             if params_dict

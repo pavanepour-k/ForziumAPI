@@ -29,7 +29,7 @@ def test_jwt_auth_middleware() -> None:
     token = create_jwt({"user": "alice"}, "s")
     mw = JWTAuthMiddleware(secret="s")
     _, params, _, resp = mw.before_request(b"", (), f"token={token}".encode())
-    assert resp is None and params[0] == "alice"
+    assert resp is None and params[-1] == "alice"
     _, _, _, resp = mw.before_request(b"", (), b"")
     assert resp == (401, "unauthorized", {})
 

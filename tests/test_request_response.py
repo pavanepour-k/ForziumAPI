@@ -21,7 +21,12 @@ from forzium.http import (
 
 
 def test_request_parses_headers_and_cookies() -> None:
-    req = Request(headers={"Content-Type": "application/json", "Cookie": "a=1; b=2"})
+    req = Request(
+        headers={
+            "Content-Type": "application/json",
+            "Cookie": "a=1; b=2",
+        },
+    )
     assert req.headers["content-type"] == "application/json"
     assert req.cookies["a"] == "1"
     assert req.cookies["b"] == "2"
@@ -125,7 +130,7 @@ def test_file_and_streaming_response(tmp_path: Any) -> None:
         FileResponse(str(file / "missing"))
 
     stream = StreamingResponse([b"a", b"b"])
-    _, body, _ = stream.serialize()
+    body = b"".join(stream.body_iter())
     assert body == b"ab"
 
     def bad_gen() -> Iterable[bytes]:
@@ -133,7 +138,7 @@ def test_file_and_streaming_response(tmp_path: Any) -> None:
         raise RuntimeError
 
     with pytest.raises(RuntimeError):
-        StreamingResponse(bad_gen()).serialize()
+        list(StreamingResponse(bad_gen()).body_iter())
 
 
 def test_http_exception() -> None:

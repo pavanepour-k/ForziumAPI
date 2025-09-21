@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from pathlib import Path
-
-import os
 from typing import TYPE_CHECKING
 
 from . import record_metric

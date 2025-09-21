@@ -3,8 +3,8 @@
 import asyncio
 
 from forzium import ForziumApp, Request
-from forzium.testclient import TestClient
 from forzium.responses import StreamingResponse
+from forzium.testclient import TestClient
 
 
 def test_multipart_form() -> None:
@@ -58,4 +58,5 @@ def test_streaming_response() -> None:
     client = TestClient(app)
     resp = client.get("/stream")
     assert resp.text == "abc"
+    assert resp.chunks == ["a", "b", "c"]
     assert chunks == [b"a", b"b", b"c"]

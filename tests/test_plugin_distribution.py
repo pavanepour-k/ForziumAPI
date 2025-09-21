@@ -1,7 +1,7 @@
 """Validate packaging metadata for CLI plugins."""
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 
 def test_sample_plugin_metadata() -> None:

@@ -1,8 +1,8 @@
 """Business logic coordinating computation operations"""
 
-from typing import Any, Dict, Iterable, List
 import time
 from array import array
+from typing import Any, Dict, Iterable, List, cast
 
 from interfaces.shared_types import CancellationToken
 
@@ -40,7 +40,7 @@ except Exception:  # pragma: no cover
 try:
     import forzium_engine
 
-    ENGINE = forzium_engine.ComputeEngine()
+    ENGINE: forzium_engine.ComputeEngine | None = forzium_engine.ComputeEngine()
 except ImportError:  # pragma: no cover
     ENGINE = None
 
@@ -71,7 +71,7 @@ except ImportError:  # pragma: no cover
 
             gc.collect()
 
-    forzium_engine = _PyOps()
+    forzium_engine = _PyOps()  # type: ignore[assignment]
 
 
 def run_computation(
@@ -175,7 +175,7 @@ def zero_copy_multiply(
     block = pool.allocate(len(values) * 8)
     view = memoryview(block).cast("d")
     view[:] = values
-    return view
+    return cast(memoryview, view)
 
 
 def profile_pool(pool: PoolAllocator, workers: int, size: int) -> int:
@@ -190,7 +190,8 @@ def profile_pool(pool: PoolAllocator, workers: int, size: int) -> int:
         nonlocal peak
         block = pool.allocate(size)
         with lock:
-            used = pool.capacity - pool.available()
+            cap = pool.capacity() if callable(pool.capacity) else pool.capacity
+            used = cap - pool.available()
             if used > peak:
                 peak = used
         pool.deallocate(block)

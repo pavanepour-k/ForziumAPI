@@ -1,0 +1,180 @@
+version: "3.9"
+
+networks:
+  forzium-dev:
+    driver: bridge
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+api:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/deployment/dev/Dockerfile
+    image: forzium/dev-stack:0.1.4
+    container_name: forzium-api
+    command:
+      - python
+      - -m
+      - forzium.cli
+      - run
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      FORZIUM_ENV: dev
+      FORZIUM_RATE_LIMIT: "200"
+      FORZIUM_RATE_LIMIT_WINDOW: "1.0"
+      FORZIUM_RATE_LIMIT_SCOPE: client
+      FORZIUM_REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_TRACES_EXPORTER: console
+      FORZIUM_OTLP_FAIL_DIR: /tmp/otlp-retry
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.00"
+          memory: 2G
+        reservations:
+          cpus: "1.00"
+          memory: 1G
+    networks:
+      - forzium-dev
+
+  redis:
+    image: redis:7-alpine
+    container_name: forzium-redis
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - forzium-dev
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.102.0
+    container_name: forzium-otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - forzium-dev
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: forzium-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+    depends_on:
+      otel-collector:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - forzium-dev
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: forzium-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      api:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+    networks:
+      - forzium-dev
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: forzium-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: forzium
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../../monitoring/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - forzium-dev

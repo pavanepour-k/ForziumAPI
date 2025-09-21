@@ -4,10 +4,11 @@ import time
 
 import pytest
 
-pytest.importorskip("forzium_engine")
 from forzium import ForziumApp
 from forzium_engine import ForziumHttpServer
 from tests.http_client import get
+
+pytest.importorskip("forzium_engine")
 
 
 def test_include_router_with_prefix() -> None:

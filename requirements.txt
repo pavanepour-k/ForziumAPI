@@ -1,8 +1,16 @@
 # Runtime dependencies for the test suite
 
-grpcio
-grpcio-tools
-grpcio-health-checking
-pytest
+fastapi>=0.116.0
+httpx>=0.27.0
+graphql-core
+pydantic>=2.9,<2.10
 coverage
+grpcio
+grpcio-health-checking
+grpcio-tools
+hypothesis
+mutmut
+protobuf
+pytest
 pytest-cov
+PyYAML

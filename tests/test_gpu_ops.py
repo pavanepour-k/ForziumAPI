@@ -1,5 +1,4 @@
-import importlib
-import sys
+"""GPU operation tests."""
 
 import importlib
 import sys

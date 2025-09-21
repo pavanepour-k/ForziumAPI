@@ -83,14 +83,14 @@ def test_websocket_route() -> None:
         await ws.send_text(str(val))
         await ws.close()
 
-    ws = WebSocket()
+    client = WebSocket()
     route = app.ws_routes[0]
     handler = app._make_ws_handler(
         route["func"],
         route["param_names"],
         route["param_converters"],
     )
-    asyncio.run(handler(ws, ("7",)))
-    assert ws.accepted
-    assert ws.sent == ["7"]
-    assert ws.closed
+    asyncio.run(handler(client, ("7",)))
+    assert client.accepted
+    assert client.sent == ["7"]
+    assert client.closed

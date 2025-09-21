@@ -1,0 +1,25 @@
+# Resource pinning profiles for load suite execution.
+# Profiles define CPU affinity, memory quotas, and threading ceilings used to
+# isolate performance runs on dedicated nodes.
+profiles:
+  dev:
+    description: "Single-node developer workstation pinning"
+    node_selector: "forzium-dev-perf"
+    cpu_set: [0, 1]
+    cpu_quota: 0.75
+    max_generator_threads: 8
+    mem_limit_mb: 4096
+  staging:
+    description: "Staging cluster dedicated perf nodes"
+    node_selector: "forzium-staging-perf"
+    cpu_set: [0, 1, 2, 3]
+    cpu_quota: 0.85
+    max_generator_threads: 16
+    mem_limit_mb: 8192
+  nightly:
+    description: "Nightly regression large-node profile"
+    node_selector: "forzium-nightly-perf"
+    cpu_set: [0, 1, 2, 3, 4, 5, 6, 7]
+    cpu_quota: 0.95
+    max_generator_threads: 32
+    mem_limit_mb: 16384

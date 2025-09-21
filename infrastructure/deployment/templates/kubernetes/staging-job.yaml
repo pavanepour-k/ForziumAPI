@@ -1,0 +1,80 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: forzium-staging-smoke
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: forzium
+    app.kubernetes.io/component: smoke-tests
+    app.kubernetes.io/version: "0.1.4"
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forzium
+        app.kubernetes.io/component: smoke-tests
+    spec:
+      restartPolicy: Never
+      serviceAccountName: forzium-staging
+      nodeSelector:
+        forzium.dev/pool: staging-cpu
+      tolerations:
+        - key: "forzium.dev/staging"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: smoke
+          image: ghcr.io/forzium/dev-stack:0.1.4
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - forzium.cli
+            - run
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --no-block
+          env:
+            - name: FORZIUM_ENV
+              value: staging
+            - name: FORZIUM_RATE_LIMIT
+              value: "200"
+            - name: FORZIUM_RATE_LIMIT_WINDOW
+              value: "1.0"
+            - name: FORZIUM_RATE_LIMIT_SCOPE
+              value: client
+            - name: FORZIUM_REDIS_URL
+              value: redis://forzium-redis.staging.svc.cluster.local:6379/0
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.staging.svc.cluster.local:4317
+            - name: FORZIUM_OTLP_FAIL_DIR
+              value: /var/log/forzium/otlp-retry
+          ports:
+            - containerPort: 8000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "2000m"
+              memory: "4Gi"
+              ephemeral-storage: "1Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+              ephemeral-storage: "4Gi"
+          volumeMounts:
+            - name: otlp-buffer
+              mountPath: /var/log/forzium
+      volumes:
+        - name: otlp-buffer
+          emptyDir:
+            sizeLimit: "4Gi"

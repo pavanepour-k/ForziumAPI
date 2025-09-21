@@ -2,11 +2,7 @@
 
 import pytest
 
-from interfaces.pydantic_compat import (
-    BaseModel,
-    field_validator,
-    model_validator,
-)
+from interfaces.pydantic_compat import BaseModel, field_validator, model_validator
 
 
 class Demo(BaseModel):

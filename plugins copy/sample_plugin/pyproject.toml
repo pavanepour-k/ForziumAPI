@@ -1,0 +1,5 @@
+[project]
+name = "forzium-sample-plugin"
+version = "0.1.4"
+[project.entry-points."forzium.plugins"]
+hello = "forzium_sample_plugin:register"

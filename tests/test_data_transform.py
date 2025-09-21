@@ -1,7 +1,8 @@
 """Tests for data transformation routines exposed via PyO3."""
 
-from forzium_engine import normalize, reshape, scale
 import pytest
+
+from forzium_engine import normalize, reshape, scale
 
 
 def test_normalize() -> None:

@@ -2,18 +2,6 @@
 
 import base64
 
-from forzium.middleware import JWTAuthMiddleware, JWTMiddleware
-from forzium.security import (
-    authorize_scopes,
-    create_jwt,
-    decode_jwt,
-    is_token_revoked,
-    hash_password,
-    refresh_jwt,
-    revoke_token,
-    rotate_jwt,
-    verify_password,
-)
 from forzium.auth import (
     get_api_key,
     get_bearer_token,
@@ -23,19 +11,31 @@ from forzium.auth import (
     oauth2_password_flow,
     parse_basic_auth,
 )
+from forzium.middleware import JWTAuthMiddleware
+from forzium.security import (
+    authorize_scopes,
+    create_jwt,
+    decode_jwt,
+    hash_password,
+    is_token_revoked,
+    refresh_jwt,
+    revoke_token,
+    rotate_jwt,
+    verify_password,
+)
 
 
 def test_jwt_auth_middleware() -> None:
     token = create_jwt({"user": "alice"}, "s")
     mw = JWTAuthMiddleware(secret="s")
     _, params, _, resp = mw.before_request(b"", (), f"token={token}".encode())
-    assert resp is None and params[0] == "alice"
+    assert resp is None and params[-1] == "alice"
     _, _, _, resp = mw.before_request(b"", (), b"")
     assert resp == (401, "unauthorized", {})
 
 
 def test_jwt_scopes_and_refresh() -> None:
-    payload = {"user": "bob", "scopes": ["read"]}
+    payload = {"user": "bob", "scopes": ["read", "refresh"]}
     access = create_jwt(payload, "a")
     refresh = create_jwt(payload, "r")
     assert authorize_scopes(access, "a", ["read"])

@@ -1,0 +1,72 @@
+{
+  "scenario": {
+    "total_requests": 1200,
+    "concurrency": 12,
+    "path": "/baseline",
+    "runs": 3,
+    "generated_at": "2025-09-19T10:02:24Z"
+  },
+  "runs": [
+    {
+      "iteration": 1,
+      "duration_s": 0.5203277840000169,
+      "throughput_rps": 2306.2385613449405,
+      "latency": {
+        "mean_ms": 3.728196925001536,
+        "median_ms": 0.39800250002031134,
+        "p95_ms": 24.780161149993756,
+        "p99_ms": 51.44500051001159,
+        "max_ms": 153.3209240000133
+      },
+      "error_rate": 0.0,
+      "error_count": 0
+    },
+    {
+      "iteration": 2,
+      "duration_s": 0.5408272170000146,
+      "throughput_rps": 2218.823243875257,
+      "latency": {
+        "mean_ms": 3.5200732116665283,
+        "median_ms": 0.3935560000059013,
+        "p95_ms": 19.36998345002506,
+        "p99_ms": 69.0441602000191,
+        "max_ms": 113.39011500001561
+      },
+      "error_rate": 0.0,
+      "error_count": 0
+    },
+    {
+      "iteration": 3,
+      "duration_s": 0.5778719979999778,
+      "throughput_rps": 2076.584441110168,
+      "latency": {
+        "mean_ms": 3.6500934783322236,
+        "median_ms": 0.40307050002752476,
+        "p95_ms": 19.27040245000455,
+        "p99_ms": 74.20637547998354,
+        "max_ms": 120.63928100002386
+      },
+      "error_rate": 0.0,
+      "error_count": 0
+    }
+  ],
+  "aggregate": {
+    "throughput_rps": {
+      "mean": 2200.548748776788,
+      "min": 2076.584441110168,
+      "max": 2306.2385613449405,
+      "stddev": 94.64220909484945
+    },
+    "duration_s": {
+      "mean": 0.5463423330000031,
+      "min": 0.5203277840000169,
+      "max": 0.5778719979999778
+    },
+    "latency_mean_ms": 3.6327878716667628,
+    "latency_p95_ms": 21.140182350007787,
+    "error_rate_mean": 0.0,
+    "error_rate_total": 0.0,
+    "total_requests": 3600,
+    "total_errors": 0
+  }
+}

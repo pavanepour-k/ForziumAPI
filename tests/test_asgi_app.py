@@ -6,7 +6,14 @@ from forzium.asgi import ASGIApp
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Synchronously execute an async coroutine.
+
+    ``asyncio.get_event_loop().run_until_complete`` is deprecated for implicit
+    loop creation starting with Python 3.12. ``asyncio.run`` handles loop
+    lifecycle safely and avoids DeprecationWarnings in the test suite.
+    """
+
+    return asyncio.run(coro)
 
 
 def test_lifespan_events() -> None:

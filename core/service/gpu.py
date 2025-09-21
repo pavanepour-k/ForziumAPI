@@ -9,15 +9,13 @@ via ``FORZIUM_GPU_DEVICE``.
 from __future__ import annotations
 
 import os
-from typing import List
 import time
+from typing import List
 
-from forzium_engine import (
-    conv2d as _rust_conv2d,
-    elementwise_add as _rust_add,
-    elementwise_mul as _rust_mul,
-    simd_matmul as _rust_matmul,
-)
+from forzium_engine import conv2d as _rust_conv2d
+from forzium_engine import elementwise_add as _rust_add
+from forzium_engine import elementwise_mul as _rust_mul
+from forzium_engine import simd_matmul as _rust_matmul
 
 try:  # pragma: no cover - optional dependency
     import cupy as cp  # type: ignore
@@ -195,7 +193,7 @@ def benchmark_tensor_ops(
 def set_device(device_id: int) -> None:
     """Select active GPU device."""
 
-    global GPU_DEVICE, USE_GPU
+    global GPU_DEVICE
     GPU_DEVICE = device_id
     if cp and USE_GPU:
         cp.cuda.Device(device_id).use()

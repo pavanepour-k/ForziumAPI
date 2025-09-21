@@ -1,6 +1,22 @@
 """Ensure Prometheus metrics endpoint exposes recorded metrics."""
 
-from forzium.app import ForziumApp
+from forzium import ForziumApp, TestClient
+
+
+def _parse_metrics(payload: str) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    for line in payload.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if " " not in line:
+            continue
+        key, value = line.split(" ", 1)
+        try:
+            metrics[key] = float(value)
+        except ValueError:
+            continue
+    return metrics
 
 
 def test_metrics_endpoint() -> None:
@@ -10,25 +26,12 @@ def test_metrics_endpoint() -> None:
     def ping() -> str:
         return "pong"
 
-    route_ping = app.routes[0]
-    handler_ping = app._make_handler(
-        route_ping["func"],
-        route_ping["param_names"],
-        route_ping["param_converters"],
-        route_ping["query_params"],
-        route_ping["expects_body"],
-        route_ping["dependencies"],
-    )
-    handler_ping(b"", (), b"")
-    route_metrics = next(r for r in app.routes if r["path"] == "/metrics")
-    handler_metrics = app._make_handler(
-        route_metrics["func"],
-        route_metrics["param_names"],
-        route_metrics["param_converters"],
-        route_metrics["query_params"],
-        route_metrics["expects_body"],
-        route_metrics["dependencies"],
-    )
-    status, body, _ = handler_metrics(b"", (), b"")
-    assert status == 200
-    assert "requests_total" in body
+    client = TestClient(app)
+    client.get("/ping")
+    metrics_response = client.get("/metrics")
+    assert metrics_response.status_code == 200
+    content_type = metrics_response.headers.get("content-type", "")
+    assert content_type.startswith("text/plain; version=0.0.4")
+    metrics = _parse_metrics(metrics_response.text)
+    assert "requests_total" in metrics
+    assert metrics["requests_total"] >= 1.0

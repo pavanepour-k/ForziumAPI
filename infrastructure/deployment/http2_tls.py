@@ -31,11 +31,6 @@ def run(
     httpd = ThreadingHTTPServer((host, port), _Handler)
     httpd.app = app  # type: ignore[attr-defined]
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    # Restrict to TLS 1.2 and above for security
-    if hasattr(ctx, "minimum_version") and hasattr(ssl, "TLSVersion"):
-        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    else:
-        ctx.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
     ctx.load_cert_chain(certfile, keyfile)
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)

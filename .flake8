@@ -1,0 +1,5 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203
+per-file-ignores =
+    interfaces/grpc/forzium_pb2.py:E501

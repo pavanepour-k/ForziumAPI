@@ -20,7 +20,7 @@ impl ComputeRequestSchema {
         py: Python<'py>,
         input: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let mapping: HashMap<String, PyObject> = input.extract()?;
+        let mapping: HashMap<String, Py<PyAny>> = input.extract()?;
 
         let data_obj = mapping
             .get("data")
@@ -39,7 +39,7 @@ impl ComputeRequestSchema {
 
         // Parameters optional dict
         let params = match mapping.get("parameters") {
-            Some(obj) => obj.extract::<HashMap<String, PyObject>>(py)?,
+            Some(obj) => obj.extract::<HashMap<String, Py<PyAny>>>(py)?,
             None => HashMap::new(),
         };
 
@@ -79,6 +79,28 @@ mod tests {
             data.set_item("data", vec![vec![1.0], vec![2.0, 3.0]])
                 .unwrap();
             data.set_item("operation", "add").unwrap();
+            assert!(schema.validate(py, &data).is_err());
+        });
+    }
+
+    #[test]
+    fn missing_operation() {
+        Python::with_gil(|py| {
+            let schema = ComputeRequestSchema::new();
+            let data = PyDict::new(py);
+            data.set_item("data", vec![vec![1.0, 2.0]]).unwrap();
+            assert!(schema.validate(py, &data).is_err());
+        });
+    }
+
+    #[test]
+    fn invalid_parameters_type() {
+        Python::with_gil(|py| {
+            let schema = ComputeRequestSchema::new();
+            let data = PyDict::new(py);
+            data.set_item("data", vec![vec![1.0, 2.0]]).unwrap();
+            data.set_item("operation", "add").unwrap();
+            data.set_item("parameters", 42).unwrap();
             assert!(schema.validate(py, &data).is_err());
         });
     }

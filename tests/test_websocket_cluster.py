@@ -2,8 +2,8 @@
 
 import asyncio
 
-from infrastructure.monitoring import get_traces
 from forzium.websockets import ClusteredBroadcastChannel, WebSocket
+from infrastructure.monitoring import get_traces
 
 
 def test_cluster_broadcast() -> None:

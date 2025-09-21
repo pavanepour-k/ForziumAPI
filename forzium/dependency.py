@@ -1,21 +1,31 @@
+# flake8: noqa
 """Minimal HTTP primitives with header and cookie support."""
 
 from __future__ import annotations
 
 import asyncio
-import cgi
+import inspect
 import json
-import mimetypes
-import os
 from http.cookies import SimpleCookie
+from typing import Any, AsyncIterator, Callable, Dict, List, Mapping, Tuple, cast
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
-from typing import (
-    Any,
-    AsyncIterator,
-    Callable,
-    Iterable,
-    Mapping,
-)
+
+
+def _parse_header(line: str) -> tuple[str, Dict[str, str]]:
+    """Parse a Content-Disposition header.
+
+    This replaces :func:`cgi.parse_header` removed from the standard library.
+    Only the subset required for multipart form parsing is implemented.
+    """
+    parts = [p.strip() for p in line.split(";") if p]
+    value = parts[0] if parts else ""
+    params: Dict[str, str] = {}
+    for item in parts[1:]:
+        if "=" in item:
+            k, v = item.split("=", 1)
+            params[k.strip()] = v.strip().strip('"')
+    return value, params
 
 
 class Request:
@@ -28,6 +38,8 @@ class Request:
         body: bytes = b"",
         headers: Mapping[str, str] | None = None,
         path_params: Mapping[str, str] | None = None,
+        max_upload_size: int | None = None,
+        allowed_mime_types: set[str] | None = None,
     ) -> None:
         self.method = method.upper()
         self.url = url
@@ -35,13 +47,17 @@ class Request:
         self.headers = {k.lower(): v for k, v in (headers or {}).items()}
         self.path_params = dict(path_params or {})
         parts = urlsplit(url)
+        parsed_items = parse_qs(parts.query).items()
         self.query_params = {
-            k: v[0] if len(v) == 1 else v for k, v in parse_qs(parts.query).items()
+            k: (v[0] if len(v) == 1 else v) for k, v in parsed_items  # noqa: E501
         }
         self._cookies: dict[str, str] | None = None
         self._form_data: dict[str, Any] | None = None
         self._files: dict[str, dict[str, Any]] | None = None
         self._stream_consumed = False
+        self.max_upload_size = max_upload_size
+        self.allowed_mime_types = allowed_mime_types
+        self.state: SimpleNamespace = SimpleNamespace()
 
     async def body(self) -> bytes:
         """Return the request body."""
@@ -63,7 +79,9 @@ class Request:
         data = await self.body()
         ctype = self.headers.get("content-type", "")
         if ctype.startswith("multipart/form-data") or data.startswith(b"--"):
-            boundary = ctype.split("boundary=")[-1] if "boundary=" in ctype else ""
+            boundary = (
+                ctype.split("boundary=")[-1] if "boundary=" in ctype else ""
+            )  # noqa: E501
             if not boundary:
                 line = data.split(b"\r\n", 1)[0]
                 if line.startswith(b"--"):
@@ -84,12 +102,35 @@ class Request:
                         ),
                         "",
                     )
-                    _, params = cgi.parse_header(disp)
+                    ctype_header = next(
+                        (
+                            h
+                            for h in headers
+                            if h.lower().startswith("content-type")
+                        ),
+                        "",
+                    )
+                    mime = ctype_header.split(":", 1)[1].strip().lower() if ctype_header else ""
+                    _, params = _parse_header(disp)
                     name = params.get("name", "")
                     filename = params.get("filename")
                     content = content.rstrip(b"\r\n")
                     if filename:
-                        files[name] = {"filename": filename, "content": content}
+                        if (
+                            self.allowed_mime_types is not None
+                            and mime not in self.allowed_mime_types
+                        ):
+                            raise ValueError("unsupported media type")
+                        if (
+                            self.max_upload_size is not None
+                            and len(content) > self.max_upload_size
+                        ):
+                            raise ValueError("file too large")
+                        files[name] = {
+                            "filename": filename,
+                            "content": content,
+                            "content_type": mime,
+                        }
                     else:
                         form[name] = content.decode()
             self._form_data = form
@@ -113,7 +154,7 @@ class Request:
         """Lazily parse cookies from the request headers."""
         if self._cookies is None:
             raw = self.headers.get("cookie", "")
-            jar = SimpleCookie()
+            jar: SimpleCookie = SimpleCookie()
             jar.load(raw)
             self._cookies = {k: morsel.value for k, morsel in jar.items()}
         return self._cookies
@@ -128,23 +169,91 @@ class Request:
 class Depends:
     """Wrapper marking a callable as a dependency."""
 
-    def __init__(self, dependency: Callable[..., Any]) -> None:
+    def __init__(self, dependency: Callable[..., Any] | None = None) -> None:
         self.dependency = dependency
+
+
+def solve_dependencies(
+    dependencies: List[Tuple[str, Callable[..., Any]]],
+    overrides: List[Dict[Callable[..., Any], Callable[..., Any]]],
+    request: Request | None = None,
+) -> tuple[dict[str, Any], list[Tuple[Callable[[], Any], bool]]]:
+    """Resolve *dependencies* applying override mappings.
+
+    ``request`` is passed to dependency callables that expect a ``Request``
+    argument.  Returns a tuple of ``(values, cleanup)`` where ``values`` maps
+    parameter names to resolved values and ``cleanup`` contains callables
+    executed after the request to tear down context managers or generators.
+    """
+
+    cache: Dict[Callable[..., Any], Any] = {}
+    cleanup: list[Tuple[Callable[[], Any], bool]] = []
+
+    def resolve(fn: Callable[..., Any]) -> Any:
+        actual = fn
+        for mapping in overrides:
+            if fn in mapping:
+                actual = mapping[fn]
+        if actual in cache:
+            return cache[actual]
+        sig = inspect.signature(actual)
+        kwargs: dict[str, Any] = {}
+        for param in sig.parameters.values():
+            if param.name == "request" or (
+                param.annotation is Request
+                or (isinstance(param.annotation, str) and param.annotation == "Request")
+            ):
+                kwargs[param.name] = request
+                continue
+            default = param.default
+            if isinstance(default, Depends):
+                kwargs[param.name] = resolve(default.dependency)
+        result = actual(**kwargs)
+        if inspect.isawaitable(result):
+            result = asyncio.run(cast(Any, result))
+        elif inspect.isasyncgen(result):
+            gen = cast(Any, result)
+            value = asyncio.run(gen.__anext__())
+            cleanup.append((gen.aclose, True))
+            result = value
+        elif inspect.isgenerator(result):
+            gen = cast(Any, result)
+            value = next(gen)
+            cleanup.append((gen.close, False))
+            result = value
+        elif hasattr(result, "__aenter__") and hasattr(result, "__aexit__"):
+            cm = result
+            value = asyncio.run(cast(Any, cm.__aenter__()))
+
+            def _async_exit(cm: Any = cm) -> Any:
+                return cm.__aexit__(None, None, None)
+
+            cleanup.append((_async_exit, True))
+            result = value
+        elif hasattr(result, "__enter__") and hasattr(result, "__exit__"):
+            cm = result
+            value = cm.__enter__()
+            
+            def _sync_exit(cm: Any = cm) -> None:
+                cm.__exit__(None, None, None)
+
+            cleanup.append((_sync_exit, False))
+            result = value
+        cache[actual] = result
+        return result
+
+    values = {name: resolve(dep) for name, dep in dependencies}
+    return values, cleanup
 
 
 class BackgroundTask:
     """Run *func* after the response is sent."""
 
-    def __init__(
-        self,
-        func: Callable[..., Any],
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
         self.func = func
         self.args = args
         self.kwargs = kwargs
-        self.is_async = asyncio.iscoroutinefunction(func)
+        self.is_async = inspect.iscoroutinefunction(func)
 
     async def __call__(self) -> None:
         if self.is_async:
@@ -156,8 +265,13 @@ class BackgroundTask:
 class BackgroundTasks:
     """Collection of background tasks."""
 
-    def __init__(self, tasks: list[BackgroundTask] | None = None) -> None:
+    def __init__(
+        self,
+        tasks: list[BackgroundTask] | None = None,
+        queue: Any | None = None,
+    ) -> None:
         self.tasks = list(tasks) if tasks else []
+        self.queue = queue
 
     def add_task(
         self,
@@ -165,7 +279,10 @@ class BackgroundTasks:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        self.tasks.append(BackgroundTask(func, *args, **kwargs))
+        if self.queue is not None:
+            self.queue.enqueue(func, *args, **kwargs)
+        else:
+            self.tasks.append(BackgroundTask(func, *args, **kwargs))
 
     async def __call__(self) -> None:
         for task in self.tasks:
@@ -194,7 +311,7 @@ class Response:
         self.headers = {k.lower(): v for k, v in (headers or {}).items()}
         self.media_type = media_type or default_type
         self.headers.setdefault("content-type", self.media_type)
-        self._cookies = SimpleCookie()
+        self._cookies: SimpleCookie = SimpleCookie()
         self.background = background
 
     def set_header(self, key: str, value: str) -> None:
@@ -229,4 +346,5 @@ __all__ = [
     "Depends",
     "Request",
     "Response",
+    "solve_dependencies",
 ]

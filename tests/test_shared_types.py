@@ -2,12 +2,9 @@
 
 import asyncio
 
-from interfaces.protocols import AsyncComputeProtocol
-from interfaces.shared_types import (
-    ComputeRequestModel,
-    Matrix,
-)
 from forzium_engine import multiply
+from interfaces.protocols import AsyncComputeProtocol
+from interfaces.shared_types import ComputeRequestModel, Matrix
 
 
 def test_matrix_round_trip() -> None:

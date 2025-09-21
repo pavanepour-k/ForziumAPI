@@ -18,6 +18,12 @@ def test_rbac_and_audit_log(monkeypatch, tmp_path) -> None:
     security.revoke_token(token)
     events = [e["action"] for e in security.get_audit_log()]
     assert "created" in events and "revoked" in events
+    alice_events = [e["action"] for e in security.get_audit_log("alice")]
+    assert "role_assigned:admin" in alice_events
+    assert "perm:write:granted" in alice_events
+    assert "perm:delete:denied" in alice_events
+    role_events = [e["action"] for e in security.get_audit_log("admin")]
+    assert "role_defined" in role_events
 
     with sqlite3.connect(db) as conn:
         cur = conn.cursor()
@@ -35,4 +41,10 @@ def test_rbac_crud(monkeypatch, tmp_path) -> None:
     assert security.list_roles() == ["user"]
     assert security.list_user_roles("bob") == ["user"]
     security.remove_role("bob", "user")
+    security.delete_role("user")
     assert security.list_user_roles("bob") == []
+    bob_events = [e["action"] for e in security.get_audit_log("bob")]
+    assert "role_assigned:user" in bob_events
+    assert "role_removed:user" in bob_events
+    role_events = [e["action"] for e in security.get_audit_log("user")]
+    assert "role_defined" in role_events and "role_deleted" in role_events

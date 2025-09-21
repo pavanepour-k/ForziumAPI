@@ -6,10 +6,8 @@ from concurrent import futures
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
-from core.service.orchestration_service import (
-    run_computation,
-    stream_computation,
-)
+from core.service.orchestration_service import run_computation, stream_computation
+
 from . import forzium_pb2, forzium_pb2_grpc
 
 

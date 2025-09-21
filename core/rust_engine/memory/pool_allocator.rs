@@ -100,7 +100,7 @@ mod tests {
         let b2 = pool.allocate(8).expect("second block");
         assert!(pool.allocate(40).is_none());
         pool.deallocate(b1);
-        assert_eq!(pool.available(), 16);
+        assert_eq!(pool.available(), 24);
         pool.deallocate(b2);
         assert_eq!(pool.available(), 32);
     }

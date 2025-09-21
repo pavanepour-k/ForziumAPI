@@ -1,0 +1,2 @@
+image: forzium:latest
+replicaCount: 1

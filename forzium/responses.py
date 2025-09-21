@@ -107,7 +107,12 @@ class FileResponse(Response):
             raise FileNotFoundError(path)
         with open(path, "rb") as f:
             data = f.read()
-        mt = media_type or mimetypes.guess_type(path)[0] or "application/octet-stream"
+        # fmt: off
+        mt = (
+            media_type or mimetypes.guess_type(path)[0]
+            or "application/octet-stream"
+        )
+        # fmt: on
         hdrs = {"content-length": str(len(data)), **(headers or {})}
         super().__init__(
             data,
@@ -146,8 +151,55 @@ class StreamingResponse(Response):
             yield chunk
 
     def serialize(self) -> tuple[int, bytes, dict[str, str]]:
-        body = b"".join(self.body_iter())
-        return self.status_code, body, self.headers
+        """Serialization is unsupported for streaming responses."""
+
+        raise RuntimeError("StreamingResponse cannot be serialized eagerly")
+
+
+class EventSourceResponse(StreamingResponse):
+    """Return events formatted for Server-Sent Events."""
+
+    def __init__(
+        self,
+        content: Iterable[Any],
+        *,
+        status_code: int = 200,
+        headers: Mapping[str, str] | None = None,
+        background: BackgroundTask | BackgroundTasks | None = None,
+    ) -> None:
+        def _format(event: Any) -> bytes:
+            lines: list[str]
+            if isinstance(event, str):
+                lines = [f"data: {event}"]
+            else:
+                lines = []
+                if isinstance(event, Mapping):
+                    ev = event.get("event")
+                    if ev is not None:
+                        lines.append(f"event: {ev}")
+                    ev_id = event.get("id")
+                    if ev_id is not None:
+                        lines.append(f"id: {ev_id}")
+                    retry = event.get("retry")
+                    if retry is not None:
+                        lines.append(f"retry: {retry}")
+                    data = event.get("data", "")
+                else:
+                    data = event
+                if isinstance(data, (dict, list)):
+                    data_str = json.dumps(data)
+                else:
+                    data_str = str(data)
+                lines.append(f"data: {data_str}")
+            return ("\n".join(lines) + "\n\n").encode()
+
+        super().__init__(
+            (_format(evt) for evt in content),
+            status_code=status_code,
+            headers=headers,
+            media_type="text/event-stream",
+            background=background,
+        )
 
 
 HTTP_200_OK = 200
@@ -180,6 +232,7 @@ __all__ = [
     "JSONResponse",
     "PlainTextResponse",
     "RedirectResponse",
+    "EventSourceResponse",
     "StreamingResponse",
     "HTTP_200_OK",
     "HTTP_201_CREATED",

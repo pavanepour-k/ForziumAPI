@@ -1,12 +1,28 @@
-# v0.1.1 Release Notes
+# ForziumAPI Release Notes
 
-This minor release focuses on quality gates and tooling for the upcoming
-stable milestone.
+## v0.1.4 (Current)
+- Added coroutine-aware handler execution so `async def` routes are awaited automatically.
+- Normalized handling for `forzium.dependency.Response` and Starlette-compatible response classes, including background tasks.
+- Implemented FastAPI-style validation error payloads with `loc`, `msg`, and `type` fields.
+- Delivered true streaming responses via `StreamingResponse`/`EventSourceResponse` with background task propagation.
+- Parallelized compute kernels (matrix multiply, convolution) using Rayon for multi-core scaling.
+- Introduced built-in rate limiting middleware configurable through environment variables or explicit registration.
+- Expanded observability with OpenTelemetry spans and structured request logging middleware.
+- Updated documentation set (architecture, migration guide, example app) to reflect parity status.
 
-## Highlights
+## v0.1.3
+- Hardened dependency resolution for nested context managers and async dependencies.
+- Added HTTP/2 server-push helpers and extended middleware hooks for request/response mutation.
+- Improved CLI ergonomics in preparation for the `forzium run` workflow.
 
-- Added mutation testing and ensured test coverage ≥90%.
-- Introduced benchmark harness with initial baselines.
-- Integrated dependency, secret, and license scans into CI.
-- Bumped project version to **0.1.1** and updated documentation.
-- Upgraded Rust HTTP server to Hyper 1.x API for improved performance and maintenance.
+## v0.1.2
+- Stabilized GPU acceleration fallbacks and added benchmark automation scripts.
+- Integrated Prometheus metrics exporter and baseline dashboards.
+- Documented security compliance workflows and sanitizer coverage expectations.
+
+## v0.1.1
+- Initial public preview aligned with FastAPI routing/dependency contracts.
+- Established OpenAPI generation, background tasks, and gRPC gateway scaffolding.
+- Published internal release processes, benchmarking strategy, and developer roles.
+
+The Python package exports the version constant as `forzium.__version__ = "0.1.4"`.  Downstream projects should track this value when pinning dependencies or generating compatibility matrices.

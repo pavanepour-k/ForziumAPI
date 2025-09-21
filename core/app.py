@@ -1,14 +1,21 @@
+# flake8: noqa
 """Forzium application routes defined via decorators."""
-
 import json
-from typing import Any, Dict, Tuple
+from typing import Annotated, Any, Dict, Iterable, Tuple
+
+from forzium_engine import ForziumHttpServer
 
 from core.service.orchestration_service import run_computation, stream_computation
-from forzium import ComputeRequest, ForziumApp
-from forzium_engine import ForziumHttpServer
+from forzium import ComputeRequest, Depends, ForziumApp
+from forzium.responses import StreamingResponse
+from forzium.security import api_key_query
 
 server = ForziumHttpServer()
 app = ForziumApp(server)
+app.add_security_scheme(
+    "ApiKey",
+    {"type": "apiKey", "in": "query", "name": "api_key"},
+)
 
 
 @app.get("/health")
@@ -28,21 +35,30 @@ def compute(payload: dict[str, Any]) -> dict[str, Any] | Tuple[int, Dict[str, st
 
 
 @app.post("/stream")
-def stream(payload: dict[str, Any]) -> str | Tuple[int, Dict[str, str]]:
+def stream(payload: dict[str, Any]) -> StreamingResponse | Tuple[int, Dict[str, str]]:
     """Stream computation results row by row as JSON lines"""
     try:
         req = ComputeRequest(**payload)
     except Exception as exc:
         return 422, {"detail": str(exc)}
-    lines = (
-        json.dumps(row)
+
+    def gen() -> Iterable[bytes]:
         for row in stream_computation(
             req.data,
             req.operation,
             req.parameters,
-        )
-    )  # Reason: avoid storing all rows before joining
-    return "\n".join(lines)
+        ):
+            yield json.dumps(row).encode() + b"\n"
+
+    return StreamingResponse(gen(), media_type="application/json")
+
+
+@app.get("/secure-data")
+def secure_data(
+    api_key: str = Depends(api_key_query),  # type: ignore[assignment]
+) -> dict[str, str]:
+    """Endpoint protected by API key passed via query parameter."""
+    return {"message": "secured"}
 
 
 __all__ = ["app", "server"]

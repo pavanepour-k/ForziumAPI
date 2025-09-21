@@ -1,0 +1,103 @@
+{
+  "metadata": {
+    "generated_at": "2025-09-20T10:15:00Z",
+    "environment": "staging-chaos",
+    "scenario": "Chaos Spike Recovery"
+  },
+  "config": {
+    "max_recovery_seconds": 12.0,
+    "stability_window_seconds": 30.0,
+    "resource_tolerances": {
+      "open_fds": 0,
+      "inflight_requests": 0,
+      "background_tasks": 0,
+      "spans_inflight": 0
+    }
+  },
+  "events": [
+    {
+      "timestamp": "2025-09-20T10:00:00Z",
+      "component": "worker:ingest-1",
+      "kind": "failure",
+      "metadata": {
+        "signal": "SIGKILL",
+        "reason": "intentional chaos injection"
+      }
+    },
+    {
+      "timestamp": "2025-09-20T10:00:01Z",
+      "component": "network",
+      "kind": "failure",
+      "metadata": {
+        "profile": "tc-loss-5pct",
+        "duration_hint_s": 12
+      }
+    },
+    {
+      "timestamp": "2025-09-20T10:00:02Z",
+      "component": "queue:telemetry",
+      "kind": "failure",
+      "metadata": {
+        "reason": "background drain paused"
+      }
+    },
+    {
+      "timestamp": "2025-09-20T10:00:07Z",
+      "component": "worker:ingest-1",
+      "kind": "recovery",
+      "metadata": {
+        "replacement": "ingest-3",
+        "notes": "pod rescheduled"
+      }
+    },
+    {
+      "timestamp": "2025-09-20T10:00:09Z",
+      "component": "network",
+      "kind": "recovery",
+      "metadata": {
+        "profile": "cleared",
+        "loss_pct": 0.0
+      }
+    },
+    {
+      "timestamp": "2025-09-20T10:00:10Z",
+      "component": "queue:telemetry",
+      "kind": "recovery",
+      "metadata": {
+        "drained_tasks": 17
+      }
+    },
+    {
+      "timestamp": "2025-09-20T10:00:45Z",
+      "component": "cluster",
+      "kind": "stability",
+      "metadata": {
+        "window_seconds": 45,
+        "status": "steady",
+        "error_rate": 0.0
+      }
+    }
+  ],
+  "resources": [
+    {
+      "name": "open_fds",
+      "baseline": 248,
+      "post_recovery": 248
+    },
+    {
+      "name": "inflight_requests",
+      "baseline": 24,
+      "post_recovery": 0
+    },
+    {
+      "name": "background_tasks",
+      "baseline": 5,
+      "post_recovery": 5
+    },
+    {
+      "name": "spans_inflight",
+      "baseline": 0,
+      "post_recovery": 0
+    }
+  ]
+}

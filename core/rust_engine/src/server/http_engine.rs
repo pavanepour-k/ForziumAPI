@@ -1,18 +1,22 @@
 use http_body_util::{BodyExt, Full};
+use hyper::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use hyper::service::service_fn;
-use hyper::{body::Bytes, body::Incoming, Method, Request, Response};
+use hyper::{HeaderMap, Method, Request, Response, body::Bytes, body::Incoming};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
+use hyper_util::server::graceful::GracefulShutdown;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyTuple};
+use serde_json::json;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
+use tokio::task::JoinSet;
 
 use crate::error::catch_unwind_py;
 
@@ -42,7 +46,7 @@ struct Route {
 
 impl Clone for Route {
     fn clone(&self) -> Self {
-        Python::attach(|py| Self {
+        Python::with_gil(|py| Self {
             pattern: self.pattern.clone(),
             handler: self.handler.clone_ref(py),
         })
@@ -95,6 +99,11 @@ impl ForziumHttpServer {
     #[pyo3(text_signature = "(self, addr)")]
     fn serve(&mut self, addr: &str) -> PyResult<()> {
         catch_unwind_py(|| {
+            if self.handle.is_some() {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                    "server already running",
+                ));
+            }
             let addr: SocketAddr = addr
                 .parse::<SocketAddr>()
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
@@ -118,26 +127,61 @@ impl ForziumHttpServer {
                         }
                     };
                     let builder = Builder::new(TokioExecutor::new());
+                    let graceful = GracefulShutdown::new();
+                    let mut join_set: JoinSet<()> = JoinSet::new();
+                    let mut shutdown_requested = false;
+
                     loop {
+                        if shutdown_requested {
+                            break;
+                        }
                         tokio::select! {
-                            _ = &mut rx => break,
-                            accept = listener.accept() => {
+                            _ = &mut rx => {
+                                shutdown_requested = true;
+                            }
+                            accept = listener.accept(), if !shutdown_requested => {
                                 let (stream, _) = match accept {
                                     Ok(s) => s,
-                                    Err(e) => { eprintln!("accept error: {e}"); continue; }
+                                    Err(e) => {
+                                        eprintln!("accept error: {e}");
+                                        continue;
+                                    }
                                 };
                                 let routes = routes.clone();
                                 let mut http_builder = builder.clone();
                                 if keep_alive.is_some() {
                                     http_builder.http1().keep_alive(true);
                                 }
-                                tokio::spawn(async move {
+                                let watcher = graceful.watcher();
+                                join_set.spawn(async move {
                                     let io = TokioIo::new(stream);
                                     let service = service_fn(move |req| handle_request(req, routes.clone()));
-                                    if let Err(err) = http_builder.serve_connection(io, service).await {
+                                    let connection = http_builder.serve_connection(io, service).into_owned();
+                                    if let Err(err) = watcher.watch(connection).await {
                                         eprintln!("server error: {err}");
                                     }
                                 });
+                            }
+                            Some(res) = join_set.join_next(), if !join_set.is_empty() => {
+                                if let Err(join_err) = res {
+                                    if join_err.is_panic() {
+                                        eprintln!("connection task panicked: {join_err}");
+                                    } else {
+                                        eprintln!("connection task error: {join_err}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    drop(listener);
+                    graceful.shutdown().await;
+                    while let Some(res) = join_set.join_next().await {
+                        if let Err(join_err) = res {
+                            if join_err.is_panic() {
+                                eprintln!("connection task panicked: {join_err}");
+                            } else {
+                                eprintln!("connection task error: {join_err}");
                             }
                         }
                     }
@@ -150,12 +194,14 @@ impl ForziumHttpServer {
     }
 
     /// Stop the server and wait for the background thread to finish.
-    fn shutdown(&mut self) {
+    fn shutdown(&mut self, py: Python<'_>) {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
         }
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            py.allow_threads(move || {
+                let _ = handle.join();
+            });
         }
     }
 
@@ -174,9 +220,12 @@ async fn handle_request(
     req: Request<Incoming>,
     routes: Arc<Mutex<HashMap<Method, Vec<Route>>>>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    let method = req.method().clone();
-    let path = req.uri().path().to_string();
-    let query = req.uri().query().unwrap_or("").to_string();
+    let (parts, body_stream) = req.into_parts();
+    let method = parts.method.clone();
+    let path = parts.uri.path().to_string();
+    let query = parts.uri.query().unwrap_or("").to_string();
+    let headers = parts.headers.clone();
+    let mut body = Some(body_stream);
     let path_segments: Vec<&str> = path
         .trim_matches('/')
         .split('/')
@@ -188,10 +237,12 @@ async fn handle_request(
         match routes.lock() {
             Ok(guard) => guard.get(&method).cloned(),
             Err(_) => {
-                return Ok(Response::builder()
-                    .status(500)
-                    .body(Full::from("{\"detail\":\"server error\"}"))
-                    .unwrap());
+                return Ok(json_response(
+                    500,
+                    json!({
+                        "detail": "Internal Server Error"
+                    }),
+                ));
             }
         }
     };
@@ -199,45 +250,72 @@ async fn handle_request(
         for route in routes_for_method.iter() {
             match match_route(&route.pattern, &path_segments) {
                 Match::Ok(params) => {
-                    let body_bytes = req.into_body().collect().await?.to_bytes();
-                    let response =
-                        call_handler(&route.handler, &route.pattern, params, body_bytes, &query)
-                            .await;
+                    let body_bytes = match body.take() {
+                        Some(stream) => stream.collect().await?.to_bytes(),
+                        None => Bytes::new(),
+                    };
+                    let response = call_handler(
+                        &route.handler,
+                        &route.pattern,
+                        params,
+                        body_bytes,
+                        &query,
+                        &headers,
+                    )
+                    .await;
                     return Ok(response);
                 }
-                Match::BadRequest => {
-                    return Ok(Response::builder()
-                        .status(400)
-                        .body(Full::from("{\"detail\":\"bad request\"}"))
-                        .unwrap());
+                Match::ValidationError(errors) => {
+                    let detail: Vec<_> = errors
+                        .into_iter()
+                        .map(|err| {
+                            json!({
+                                "loc": err.loc,
+                                "msg": err.msg,
+                                "type": err.typ,
+                            })
+                        })
+                        .collect();
+                    return Ok(json_response(422, json!({ "detail": detail })));
                 }
                 Match::Miss => {}
             }
         }
     }
 
-    // fallback health endpoint
-    if method == Method::GET && path == "/health" {
-        return Ok(Response::new(Full::from("{\"status\":\"ok\"}")));
+    // fallback health, readiness, and liveness endpoints
+    if method == Method::GET && matches!(path.as_str(), "/health" | "/ready" | "/live") {
+        return Ok(Response::builder()
+            .header("content-type", "application/json")
+            .body(Full::from("{\"status\":\"ok\"}"))
+            .unwrap());
     }
 
-    Ok(Response::builder()
-        .status(404)
-        .body(Full::from("{\"detail\":\"not found\"}"))
-        .unwrap())
+    Ok(json_response(404, json!({ "detail": "not found" })))
 }
 
 /// Result of attempting to match a path to a route pattern.
+#[derive(Debug)]
 enum Match {
     Ok(Vec<String>),
-    BadRequest,
+    ValidationError(Vec<PathValidationError>),
     Miss,
+}
+
+#[derive(Debug, Clone)]
+struct PathValidationError {
+    loc: Vec<String>,
+    msg: &'static str,
+    typ: &'static str,
 }
 
 /// Parse a path template into segments.
 fn parse_pattern(path: &str) -> PyResult<Vec<Segment>> {
     let mut segments = Vec::new();
     for seg in path.trim_matches('/').split('/') {
+        if seg.is_empty() {
+            continue;
+        }
         if seg.starts_with('{') && seg.ends_with('}') {
             let inner = &seg[1..seg.len() - 1];
             let mut parts = inner.split(':');
@@ -265,6 +343,7 @@ fn match_route(pattern: &[Segment], path: &[&str]) -> Match {
         return Match::Miss;
     }
     let mut params = Vec::new();
+    let mut errors: Vec<PathValidationError> = Vec::new();
     for (seg, part) in pattern.iter().zip(path.iter()) {
         match seg {
             Segment::Static(s) => {
@@ -272,18 +351,43 @@ fn match_route(pattern: &[Segment], path: &[&str]) -> Match {
                     return Match::Miss;
                 }
             }
-            Segment::Param { ty, .. } => match ty {
+            Segment::Param { name, ty } => match ty {
                 ParamType::Int => {
                     if part.parse::<i64>().is_err() {
-                        return Match::BadRequest;
+                        errors.push(PathValidationError {
+                            loc: vec!["path".to_string(), name.clone()],
+                            msg: "value is not a valid integer",
+                            typ: "type_error.integer",
+                        });
+                    } else {
+                        params.push(part.to_string());
                     }
-                    params.push(part.to_string());
                 }
                 ParamType::Str => params.push(part.to_string()),
             },
         }
     }
-    Match::Ok(params)
+    if errors.is_empty() {
+        Match::Ok(params)
+    } else {
+        Match::ValidationError(errors)
+    }
+}
+
+fn json_response(status: u16, body: serde_json::Value) -> Response<Full<Bytes>> {
+    const FALLBACK: &[u8] = b"{\"detail\":\"Internal Server Error\"}";
+    let encoded = serde_json::to_vec(&body).unwrap_or_else(|_| FALLBACK.to_vec());
+    Response::builder()
+        .status(status)
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .body(Full::from(encoded))
+        .unwrap_or_else(|_| {
+            Response::builder()
+                .status(500)
+                .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                .body(Full::from(FALLBACK.to_vec()))
+                .expect("fallback response")
+        })
 }
 
 /// Call a Python handler with body and extracted parameters.
@@ -293,10 +397,11 @@ async fn call_handler(
     params: Vec<String>,
     body: Bytes,
     query: &str,
+    headers: &HeaderMap,
 ) -> Response<Full<Bytes>> {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        Python::attach(|py| -> PyResult<Py<PyAny>> {
-            let py_body = PyBytes::new(py, &body);
+        Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            let py_body = PyBytes::new(py, body.as_ref());
             let mut objs: Vec<Py<PyAny>> = Vec::new();
             for (seg, val) in pattern
                 .iter()
@@ -318,42 +423,119 @@ async fn call_handler(
             }
             let params_tuple = PyTuple::new(py, objs)?;
             let py_query = PyBytes::new(py, query.as_bytes());
-            handler.call1(py, (py_body, params_tuple, py_query))
+            let py_headers = PyDict::new(py);
+            for (name, value) in headers.iter() {
+                if let Ok(val_str) = value.to_str() {
+                    py_headers.set_item(name.as_str(), val_str)?;
+                }
+            }
+            handler.call1(py, (py_body, params_tuple, py_query, py_headers))
         })
     }));
     match result {
-        Ok(Ok(obj)) => match extract_status_body(obj) {
-            Ok((status, body)) => Response::builder()
-                .status(status)
-                .header("content-type", "application/json")
-                .body(Full::from(body))
-                .unwrap(),
+        Ok(Ok(obj)) => match extract_response(obj) {
+            Ok((status, body_bytes, headers_map)) => {
+                let mut builder = Response::builder().status(status);
+                let mut has_content_type = false;
+                for (key, value) in headers_map {
+                    if let (Ok(name), Ok(val)) = (
+                        HeaderName::from_bytes(key.as_bytes()),
+                        HeaderValue::from_str(&value),
+                    ) {
+                        if name == CONTENT_TYPE {
+                            has_content_type = true;
+                        }
+                        builder = builder.header(name, val);
+                    }
+                }
+                if !has_content_type {
+                    builder =
+                        builder.header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                }
+                builder.body(Full::from(body_bytes)).unwrap()
+            }
             Err(e) => {
                 eprintln!("handler error: {e}");
-                Response::builder()
-                    .status(500)
-                    .body(Full::from("{\"detail\":\"server error\"}"))
-                    .unwrap()
+                json_response(500, json!({ "detail": "Internal Server Error" }))
             }
         },
         Ok(Err(e)) => {
             eprintln!("handler error: {e}");
-            Response::builder()
-                .status(500)
-                .body(Full::from("{\"detail\":\"server error\"}"))
-                .unwrap()
+            json_response(500, json!({ "detail": "Internal Server Error" }))
         }
         Err(_) => {
             eprintln!("handler panic");
-            Response::builder()
-                .status(500)
-                .body(Full::from("{\"detail\":\"server error\"}"))
-                .unwrap()
+            json_response(500, json!({ "detail": "Internal Server Error" }))
         }
     }
 }
 
-/// Extract response status code and body from a Python object.
-fn extract_status_body(obj: Py<PyAny>) -> PyResult<(u16, String)> {
-    Python::attach(|py| obj.bind(py).extract())
+/// Extract response components from the Python return value.
+fn extract_response(obj: Py<PyAny>) -> PyResult<(u16, Vec<u8>, HashMap<String, String>)> {
+    Python::with_gil(|py| {
+        let bound = obj.bind(py);
+        let tuple = bound.downcast::<PyTuple>().map_err(|_| {
+            pyo3::exceptions::PyTypeError::new_err("expected (status, body, headers) tuple")
+        })?;
+        if tuple.len() != 3 {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "expected (status, body, headers) tuple",
+            ));
+        }
+        let status: u16 = tuple.get_item(0)?.extract()?;
+        let body_item = tuple.get_item(1)?;
+        let body_bytes = if let Ok(text) = body_item.extract::<String>() {
+            text.into_bytes()
+        } else if let Ok(chunks) = body_item.extract::<Vec<String>>() {
+            chunks.join("").into_bytes()
+        } else if let Ok(raw) = body_item.extract::<Vec<u8>>() {
+            raw
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "response body must be str, bytes, or list[str]",
+            ));
+        };
+        let headers = tuple.get_item(2)?.extract()?;
+        Ok((status, body_bytes, headers))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_pattern_static_and_params() {
+        let pattern = parse_pattern("/users/{id:int}/items/{name}").unwrap();
+        assert!(matches!(pattern[0], Segment::Static(ref s) if s == "users"));
+        assert!(matches!(pattern[1], Segment::Param { .. }));
+        assert!(matches!(pattern[2], Segment::Static(ref s) if s == "items"));
+        assert!(matches!(pattern[3], Segment::Param { .. }));
+    }
+
+    #[test]
+    fn match_route_success_and_params() {
+        let pattern = parse_pattern("/users/{id:int}/items/{name}").unwrap();
+        let path = ["users", "42", "items", "hat"];
+        match match_route(&pattern, &path) {
+            Match::Ok(params) => assert_eq!(params, vec!["42".to_string(), "hat".to_string()]),
+            other => panic!("expected Match::Ok, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn match_route_validation_error_on_type_mismatch() {
+        let pattern = parse_pattern("/users/{id:int}").unwrap();
+        let path = ["users", "not-int"];
+        match match_route(&pattern, &path) {
+            Match::ValidationError(errors) => {
+                assert_eq!(errors.len(), 1);
+                let err = &errors[0];
+                assert_eq!(err.loc, vec!["path".to_string(), "id".to_string()]);
+                assert_eq!(err.msg, "value is not a valid integer");
+                assert_eq!(err.typ, "type_error.integer");
+            }
+            other => panic!("expected Match::ValidationError, got {:?}", other),
+        }
+    }
 }

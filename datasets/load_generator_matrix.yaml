@@ -1,0 +1,78 @@
+# Mapping between canonical scenarios and generator configurations.
+release: "v0.1.4"
+template_version: 1
+generators:
+  - id: "steady-baseline"
+    pattern: "steady"
+    concurrency: 32
+    locust:
+      user_class: "load_generators.locust.locustfile.ForziumUser"
+      shape: "load_generators.locust.locustfile.ScenarioLoadShape"
+      notes: "Constant arrival at 180 rps with 30s warmup (discarded)."
+    k6:
+      executor: "per-vu-iterations"
+      stages: ["warmup", "steady"]
+      iterations_per_vu: 1857
+      max_duration_s: 340
+    tags:
+      tenants: ["tenant-alpha", "tenant-beta"]
+      warmup: true
+  - id: "poisson-read-heavy"
+    pattern: "poisson"
+    concurrency: 48
+    locust:
+      user_class: "load_generators.locust.locustfile.ForziumUser"
+      notes: "Poisson arrivals λ=150 with tenant weighting."
+    k6:
+      executor: "per-vu-iterations"
+      stages: ["poisson"]
+      iterations_per_vu: 1447
+      max_duration_s: 475
+    tags:
+      tenants: ["tenant-retail", "tenant-gaming", "tenant-public"]
+  - id: "burst-write-intensive"
+    pattern: "burst"
+    concurrency: 64
+    locust:
+      user_class: "load_generators.locust.locustfile.ForziumUser"
+      notes: "Four-stage burst sequence across 60/30/90/30s."
+    k6:
+      executor: "per-vu-iterations"
+      stages: ["burst-1", "burst-2", "burst-3", "burst-4"]
+      iterations_per_vu: 376
+      max_duration_s: 280
+    tags:
+      tenants: ["tenant-enterprise", "tenant-smb"]
+  - id: "ramp-tenant-rotation"
+    pattern: "ramp"
+    concurrency: 40
+    locust:
+      user_class: "load_generators.locust.locustfile.ForziumUser"
+      notes: "Ramp phases (300/180/120s) with deterministic tenant rotation."
+    k6:
+      executor: "per-vu-iterations"
+      stages: ["ramp-1", "ramp-2", "ramp-3"]
+      iterations_per_vu: 2523
+      max_duration_s: 700
+    tags:
+      tenants: ["tenant-retail", "tenant-smb", "tenant-enterprise", "tenant-public"]
+      rotation_cycle_s: 60
+  - id: "chaos-spike-recovery"
+    pattern: "spike"
+    concurrency: 72
+    locust:
+      user_class: "load_generators.locust.locustfile.ForziumUser"
+      notes: "45s pre-warm, 20s spike at 400 rps, 120s recovery."
+    k6:
+      executor: "per-vu-iterations"
+      stages: ["spike-prewarm", "spike", "spike-recovery"]
+      iterations_per_vu: 319
+      max_duration_s: 270
+    tags:
+      tenants: ["tenant-public", "tenant-research", "tenant-industrial"]
+metadata:
+  generated_by: "datasets/load_generator_matrix.yaml"
+  generated_at: "2025-03-01T00:00:00Z"
+  notes:
+    - "Iterations per VU assume 1:1 mapping between scenario entries and scheduled requests."
+    - "Durations include 10s guard band beyond the final scheduled offset."

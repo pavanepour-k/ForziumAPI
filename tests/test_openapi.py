@@ -51,7 +51,7 @@ def test_openapi_generation() -> None:
         route.get("background_param"),
         [route.get("dependency_overrides", {}), app.dependency_overrides],
     )
-    status, _, _ = handler(b"", ("1",), b"q=2")
+    status, _, _ = handler(b"", ("1",), b"q=2", None)
     assert status == 200
     assert calls == ["a", "b"]
 
@@ -59,11 +59,21 @@ def test_openapi_generation() -> None:
     item_schema = schema["components"]["schemas"]["Item"]
     assert item_schema["properties"]["id"]["type"] == "integer"
     assert "ApiKeyAuth" in schema["components"]["securitySchemes"]
+    assert "HTTPValidationError" in schema["components"]["schemas"]
     op = schema["paths"]["/v1/items/{item_id}"]["get"]
     assert op["tags"] == ["items"]
-    assert any(p["name"] == "item_id" and p["in"] == "path" for p in op["parameters"])
-    assert any(p["name"] == "q" and p["in"] == "query" for p in op["parameters"])
+    assert any(
+        p["name"] == "item_id" and p["in"] == "path" for p in op["parameters"]
+    )  # noqa: E501
+    assert any(
+        p["name"] == "q" and p["in"] == "query" for p in op["parameters"]
+    )  # noqa: E501
     assert "404" in op["responses"]
+    assert "422" in op["responses"]
+    ref = op["responses"]["422"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]  # noqa: E501
+    assert ref == "#/components/schemas/HTTPValidationError"
     schema_handler = cast(
         Callable[[], dict[str, Any]],
         next(r["func"] for r in app.routes if r["path"] == "/openapi.json"),

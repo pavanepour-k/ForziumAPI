@@ -2,9 +2,9 @@
 
 
 def register(subparsers) -> None:
-    parser = subparsers.add_parser("Sample")
+    parser = subparsers.add_parser("hello")
     parser.set_defaults(func=_run)
 
 
 def _run(args) -> None:
-    print("Sample plugin")
+    print("hello plugin")

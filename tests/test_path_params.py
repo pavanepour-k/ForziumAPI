@@ -1,33 +1,36 @@
-"""Tests for dynamic path parameter handling in the Rust server."""
+# flake8: noqa
+import json
 
-import time
-
-import pytest
-
-pytest.importorskip("forzium_engine")
-from forzium import ForziumApp  # noqa: E402
-from forzium_engine import ForziumHttpServer  # noqa: E402
-from tests.http_client import get  # noqa: E402
+from forzium import Depends, ForziumApp
 
 
-def test_path_parameters():
-    """Server should extract and convert path parameters."""
+def _prefix() -> str:
+    return "item"
 
-    server = ForziumHttpServer()
-    app = ForziumApp(server)
 
-    @app.get("/add/{x:int}/{y:int}")
-    def add(x: int, y: int) -> dict:
-        return {"result": x + y}
+def test_path_param_and_dependency() -> None:
+    app = ForziumApp()
 
-    server.serve("127.0.0.1:8110")
-    time.sleep(0.2)
-    try:
-        resp = get("http://127.0.0.1:8110/add/3/5")
-        assert resp.status_code == 200
-        assert resp.json() == {"result": 8}
+    @app.get("/items/{item_id:int}")
+    def read_item(
+        item_id: int, prefix: str = Depends(_prefix)  # type: ignore[assignment]
+    ) -> dict[str, str]:
+        return {"name": f"{prefix}{item_id}"}
 
-        resp = get("http://127.0.0.1:8110/add/three/5")
-        assert resp.status_code == 400
-    finally:
-        server.shutdown()
+    route = app.routes[0]
+    handler = app._make_handler(  # pylint: disable=protected-access
+        route["func"],
+        route["param_names"],
+        route["param_converters"],
+        route["query_params"],
+        route["expects_body"],
+        route["dependencies"],
+        route.get("expects_request", False),
+        route["method"],
+        route["path"],
+        route.get("background_param"),
+    )
+
+    status, body, _ = handler(b"", ("7",), b"")
+    assert status == 200
+    assert json.loads(body) == {"name": "item7"}

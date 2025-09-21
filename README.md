@@ -1,161 +1,124 @@
-# Forzium
+# ForziumAPI
 
-Forzium is a FastAPI-compatible framework powered by a Rust core.
-Current status: **pre-v0.1.0** (development).
-See `docs/release_notes.md` for draft notes.
-It ships with a native Rust HTTP server, and routes are registered via
-Forzium's decorator-based API. Pydantic sits behind a thin facade while
-a custom ASGI app with startup/shutdown events manages lifecycle needs.
-WebSockets, sessions, templates, a test client, and authentication
-helpers are provided natively. Request and response middleware hooks are
-available. Lightweight Request and Response classes handle headers,
-cookies, and background tasks, and a simple `Depends` helper enables
-basic dependency injection.
+## Introduction
 
-## Features
+ForziumAPI is a high-performance API framework that reimplements FastAPI semantics on top of a Rust execution core.  The goal is full contract compatibility with FastAPI while delivering materially lower latency and higher throughput.
 
-### FastAPI-Compatible Core
+Developers continue to author endpoints in Python, but request handling, data validation, and heavy compute live in Rust.  This division eliminates Python’s interpreter overhead for the hot path while keeping the ergonomic decorator API.
 
-- Rust HTTP server with decorator-based routing, typed path parameters, and query handling
-- Automatic OpenAPI schema generation and interactive docs at `/docs` and `/redoc`
-- Request/Response classes with JSON, form, file parsing, cookies, and background tasks
-- Dependency injection via `Depends` and background task utilities
-- Session management through signed cookies and file-backed stores
-- Template rendering and response helpers for JSON, HTML, files, and streams
-- WebSocket routes with in-memory channels
-- Middleware support including CORS, GZip, HTTPS redirect, and TrustedHost
-- TestClient for in-process request testing
+ForziumAPI operates in two complementary modes:
 
-### Optional Forzium Plugins(TODO)
+- **Library Mode** – import the application and call handlers directly (zero HTTP cost, ideal for internal calls).
+- **Server Mode** – run the embedded Rust HTTP server (`forzium_engine::ForziumHttpServer`) that dispatches to Python handlers via PyO3.
 
-- HTTP/2 server push helpers
-- Prometheus metrics endpoint
-- CLI with dynamic plugin system
-- RBAC and JWT utilities backed by SQLite
-- gRPC computation interface with health checks
-- GPU-accelerated tensor operations
-- WebSocket broadcast channels and clustering
+The current package version is exported as `forzium.__version__ = "0.1.4"`.
 
-## Example
+---
+
+## Feature Highlights (v0.1.4)
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Async route handlers | ✅ | Awaited transparently; exceptions reuse shared error handling |
+| FastAPI-style validation errors | ✅ | `{"detail": [{"loc", "msg", "type"}]}` payloads for 422 responses |
+| Direct `Response` objects | ✅ | Status, headers, background tasks preserved without double encoding |
+| Streaming responses | ✅ | `StreamingResponse` and `EventSourceResponse` send chunked bodies incrementally |
+| Background tasks | ✅ | Merge with response-bound tasks even for streaming outputs |
+| Pydantic v1/v2 request models | ✅ | Parsed through `_coerce_value` with native validation errors |
+| Rayon-parallel compute engine | ✅ | Matrix/conv kernels scale across CPU cores |
+| Built-in rate limiting | ✅ | Middleware + env config (`FORZIUM_RATE_LIMIT`, `*_WINDOW`, `*_SCOPE`) |
+| Observability | ✅ | OpenTelemetry spans, Prometheus metrics, structured request logging |
+| CLI workflow | ✅ | `forzium run` auto-loads apps; `forzium new` scaffolds projects; `forzium bench` writes JSON reports |
+
+---
+
+## Using ForziumAPI
+
+
+### Defining Routes
 
 ```python
-from forzium import ForziumApp
+from typing import Any
+from forzium import ForziumApp, Response
+from forzium_engine import ForziumHttpServer
 
-app = ForziumApp()
+server = ForziumHttpServer()
+app = ForziumApp(server)
 
 @app.get("/health")
-def health() -> dict:
+def health() -> dict[str, str]:
     return {"status": "ok"}
+
+@app.post("/compute")
+def compute(payload: dict[str, Any]) -> Response:
+    # Heavy lifting performed in Rust compute engine
+    result = run_computation(payload)
+    return Response(result, status_code=200)
 ```
 
-## Installation
+Handlers may be synchronous or `async def`; coroutine return values are awaited automatically.  Background tasks can be injected via `BackgroundTasks` dependencies, and returning `forzium.Response` preserves custom headers, status codes, and binary bodies.
 
-```bash
-pip install .
-```
-
-## Running
-
-```bash
-python run_server.py
-```
-
-This launches the bundled Rust HTTP server. It listens on
-`0.0.0.0:8000` by default, allowing access from outside the container
-when the port is exposed. It supports dynamic path parameters, allowing
-routes such as `/items/{id:int}` to be registered and handled natively.
-Interactive documentation is served at `/docs` (Swagger UI) and
-`/redoc` (ReDoc).
-
-## Cancellation and Memory Model
-
-Long-running operations may be aborted using
-``CancellationToken`` objects passed to computation helpers. Memory is
-managed by a variable-size ``PoolAllocator`` allowing zero-copy buffer
-sharing across the Rust/Python FFI boundary while keeping peak usage
-below 500 MB under benchmark workloads.
-
-## Testing and HTTP Primitives
-
-The ``TestClient`` issues requests directly against a ``ForziumApp``
-without a network stack. Responses expose ``json`` helpers and header
-access. The ``Request`` and ``Response`` classes provide cookie and
-background task management, while the ``TemplateRenderer`` renders simple
-``str.format`` templates from disk.
-
-## GPU Acceleration
-
-Matrix helpers in ``core.service.gpu`` call custom CUDA kernels when
-``FORZIUM_USE_GPU=1``. Set ``FORZIUM_GPU_DEVICE`` to select which GPU
-device runs the kernels; CPU paths delegate to the Rust engine.
-
-## Session Management
-
-Forzium ships with two session options. ``SessionMiddleware`` stores all
-data client side in a signed cookie. ``FileSessionMiddleware`` keeps a
-server-side JSON file of session state referenced by an identifier in the
-cookie. The latter allows persistent sessions across restarts at the
-cost of disk I/O.
-
-## Docker
-
-```bash
-docker build -t forzium .
-docker run -p 8000:8000 forzium
-```
-
-## Pipeline
-
-To run all checks locally, execute:
-
-```bash
-python build_pipeline.py
-```
-
-Continuous integration runs the same suite via
-`.github/workflows/auto-ci.yml`. Each push triggers ruff, flake8, mypy,
-`cargo fmt --check`, the unit tests, and the performance benchmark.
-
-To view a coverage report, run:
-
-```bash
-poetry run pytest
-```
-
-Coverage statistics are printed after the test summary.
-
-See `scripts/README.md` for additional development scripts.
-
-## gRPC Interface
-
-Start a gRPC server exposing computation endpoints:
+### Running the Server
 
 ```python
-from interfaces.grpc import start_grpc_server
-server = start_grpc_server()
+if __name__ == "__main__":
+    server.serve("127.0.0.1:8000")
 ```
 
-The server also exposes the gRPC health checking service on the same
-port.
+The Rust server owns the socket and dispatches to `_make_handler`.  Shutdown occurs via `server.shutdown()` or SIGINT handling in the CLI.
 
-## Monitoring
+### Library Mode Usage
 
-Failed OTLP exports are written to disk when a buffering directory is
-configured. Stored batches can be resent via ``forzium replay-otlp``.
-The replay service can be auto-started on app startup; configure the
-interval via ``FORZIUM_REPLAY_INTERVAL``.
+The same handlers can be invoked directly without HTTP.  Dependency resolution, validation, and background tasks still apply, making it simple to reuse API logic internally.
 
-## RBAC Storage
+### Pydantic & Dataclass Support
 
-Role definitions, assignments, and audit logs persist to a SQLite
-database specified by ``FORZIUM_RBAC_DB``.
-RBAC HTTP endpoints require a JWT signed with ``FORZIUM_SECRET`` and the
-``rbac`` scope.
+Annotating parameters with dataclasses or `pydantic.BaseModel` subclasses triggers structured parsing through `_coerce_value`.  Validation failures yield 422 responses mirroring FastAPI’s schema so existing clients continue to work.
 
-## Security Schemes
+### Streaming Responses
 
-Forzium provides helpers for OAuth2 flows, HTTP Basic/Bearer auth, and API
-keys. The ``forzium.auth`` module exposes utilities to parse Authorization
-headers, retrieve API keys from headers, query parameters, or cookies, and
-issue JWTs for password, client credentials, authorization code, and
-implicit flows.
+Return `StreamingResponse` or `EventSourceResponse` to stream data chunk-by-chunk.  The Rust server consumes the async iterator, propagates headers, and still executes background tasks when the stream finishes.
+
+### Built-in Rate Limiting
+
+Attach the limiter directly or configure it via environment:
+
+```python
+from forzium import RateLimitMiddleware
+
+app.middleware("http")(RateLimitMiddleware(limit=100, window=1.0, scope="client"))
+```
+
+Environment variables `FORZIUM_RATE_LIMIT`, `FORZIUM_RATE_LIMIT_WINDOW`, and `FORZIUM_RATE_LIMIT_SCOPE` provide zero-code configuration.  Responses include `429` with `Retry-After` when limits are exceeded.
+
+
+## Project Structure
+
+* **`core/`** – Business logic and services that consume the Rust compute engine.
+* **`forzium/`** – Framework core implementing routing, dependency injection, HTTP utilities, CLI tooling, and middleware.
+* **`interfaces/`** – gRPC definitions and shared schema compatibility helpers.
+* **`infrastructure/`** – Monitoring instrumentation, OTLP exporters, and deployment assets.
+* **`tests/`** – Comprehensive parity, integration, performance, and stress tests.
+* **`examples/`** – Reference applications illustrating recommended patterns.
+
+---
+
+## Processing Pipeline
+
+1. Rust server accepts the request and resolves the Python handler key.
+2. OpenTelemetry spans start and Prometheus counters increment.
+3. Dependencies resolve (sync or async) via `solve_dependencies`.
+4. Bodies are coerced into annotated types (dataclasses, Pydantic models, primitives).
+5. Handler executes; coroutine results are awaited automatically.
+6. Responses are normalized (streaming, Response objects, or negotiated JSON/text).
+7. Background tasks execute asynchronously after the response is dispatched.
+8. HTTP/2 push hints and telemetry finalizers run before control returns to Hyper.
+
+---
+
+## Getting Started Quickly
+
+1. Install dependencies: `pip install -r requirements.txt` (includes `forzium` + Rust engine build tooling).
+2. Review the example app in `examples/todo_api/` and run `python examples/todo_api/main.py`.
+3. Explore observability via the integrated Prometheus and OpenTelemetry exporters found in `infrastructure/monitoring`.
+4. Use `forzium --help` to discover CLI commands (`run`, `new`, `bench`). The benchmark command prints metrics to stdout and saves a prettified JSON report to `bench-results.json` (configurable via `--output`).

@@ -58,4 +58,5 @@ def test_streaming_response() -> None:
     client = TestClient(app)
     resp = client.get("/stream")
     assert resp.text == "abc"
+    assert resp.chunks == ["a", "b", "c"]
     assert chunks == [b"a", b"b", b"c"]

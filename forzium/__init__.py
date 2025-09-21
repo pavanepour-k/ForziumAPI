@@ -1,6 +1,6 @@
 """Forzium Python helpers."""
 
-__version__ = "0.1.1"  # Reason: freeze public API with version constant
+__version__ = "0.1.4"  # Reason: freeze public API with version constant
 
 from interfaces.shared_types.compute_request import ComputeRequestModel
 
@@ -16,11 +16,15 @@ from .middleware import (
     GZipMiddleware,
     HTTPSRedirectMiddleware,
     JWTMiddleware,
+    RateLimitMiddleware,
+    RequestLoggerMiddleware,
     SessionMiddleware,
+    SecurityHeadersMiddleware,
     StaticFilesMiddleware,
     TrustedHostMiddleware,
 )
 from .templates import TemplateRenderer
+from .task_queue import CeleryTaskQueue, RedisTaskQueue
 from .testclient import Response as TestResponse
 from .testclient import TestClient
 from .websockets import WebSocket, WebSocketRoute
@@ -39,9 +43,14 @@ __all__ = [
     "SessionMiddleware",
     "FileSessionMiddleware",
     "JWTMiddleware",
+    "RateLimitMiddleware",
+    "RequestLoggerMiddleware",
+    "SecurityHeadersMiddleware",
     "StaticFilesMiddleware",
     "BackgroundTask",
     "BackgroundTasks",
+    "RedisTaskQueue",
+    "CeleryTaskQueue",
     "Request",
     "Response",
     "TemplateRenderer",

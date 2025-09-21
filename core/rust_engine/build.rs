@@ -20,7 +20,7 @@ fn main() {
         let lib_name = cfg
             .lib_name
             .clone()
-            .unwrap_or_else(|| "python3.11".to_string());
+            .unwrap_or_else(|| "python3.12".to_string());
         println!("cargo:rustc-link-lib={}", lib_name);
     }
 }

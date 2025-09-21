@@ -1,0 +1,411 @@
+{
+  "generated_at": "2025-09-20T11:54:05Z",
+  "duration_scale": 0.01,
+  "max_requests": 250,
+  "scenarios": [
+    {
+      "id": "steady-baseline",
+      "pattern": "steady",
+      "total_requests": 250,
+      "included_requests": 226,
+      "success_count": 250,
+      "error_count": 0,
+      "throughput_rps": 75.8919736708765,
+      "error_rate": 0.0,
+      "metrics": {
+        "latency_ms": {
+          "mean": 0.208567743371065,
+          "p50": 0.18935850005163957,
+          "p95": 0.3504712499875495,
+          "p99": 0.44197075004603903,
+          "max": 0.7313109999813605
+        }
+      },
+      "stage_metrics": [
+        {
+          "name": "warmup",
+          "pattern": "warmup",
+          "include_in_metrics": false,
+          "duration_s": 0.3,
+          "demand_rps": 180.0,
+          "observed_throughput_rps": 0.0,
+          "latency_ms": {
+            "mean": 0.2441759583291514,
+            "p50": 0.2215969999497247,
+            "p95": 0.3131206499574546,
+            "p99": 0.4706993000854708,
+            "max": 0.5174560001250939
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "steady",
+          "pattern": "steady",
+          "include_in_metrics": true,
+          "duration_s": 3.0,
+          "demand_rps": 180.0,
+          "observed_throughput_rps": 75.8919736708765,
+          "latency_ms": {
+            "mean": 0.208567743371065,
+            "p50": 0.18935850005163957,
+            "p95": 0.3504712499875495,
+            "p99": 0.44197075004603903,
+            "max": 0.7313109999813605
+          },
+          "errors": 0,
+          "saturated": false
+        }
+      ],
+      "saturation_points": [],
+      "failure_modes": []
+    },
+    {
+      "id": "poisson-read-heavy",
+      "pattern": "poisson",
+      "total_requests": 250,
+      "included_requests": 225,
+      "success_count": 250,
+      "error_count": 0,
+      "throughput_rps": 53.76000452329566,
+      "error_rate": 0.0,
+      "metrics": {
+        "latency_ms": {
+          "mean": 0.24099826221572584,
+          "p50": 0.22082800001044234,
+          "p95": 0.4259453999566176,
+          "p99": 0.5454807200112552,
+          "max": 0.6916629999977886
+        }
+      },
+      "stage_metrics": [
+        {
+          "name": "warmup",
+          "pattern": "warmup",
+          "include_in_metrics": false,
+          "duration_s": 0.45,
+          "demand_rps": 150.0,
+          "observed_throughput_rps": 0.0,
+          "latency_ms": {
+            "mean": 0.256221519994142,
+            "p50": 0.23314500003834837,
+            "p95": 0.371409199988193,
+            "p99": 0.7011478000913491,
+            "max": 0.8042470001328184
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "poisson",
+          "pattern": "poisson",
+          "include_in_metrics": true,
+          "duration_s": 4.2,
+          "demand_rps": 150.0,
+          "observed_throughput_rps": 53.76000452329566,
+          "latency_ms": {
+            "mean": 0.24099826221572584,
+            "p50": 0.22082800001044234,
+            "p95": 0.4259453999566176,
+            "p99": 0.5454807200112552,
+            "max": 0.6916629999977886
+          },
+          "errors": 0,
+          "saturated": false
+        }
+      ],
+      "saturation_points": [],
+      "failure_modes": []
+    },
+    {
+      "id": "burst-write-intensive",
+      "pattern": "burst",
+      "total_requests": 244,
+      "included_requests": 244,
+      "success_count": 244,
+      "error_count": 0,
+      "throughput_rps": 90.3870669706733,
+      "error_rate": 0.0,
+      "metrics": {
+        "latency_ms": {
+          "mean": 0.22518128279160488,
+          "p50": 0.2018880001060097,
+          "p95": 0.39820974997155645,
+          "p99": 0.5557714998622028,
+          "max": 0.7291090000762779
+        }
+      },
+      "stage_metrics": [
+        {
+          "name": "warmup",
+          "pattern": "warmup",
+          "include_in_metrics": true,
+          "duration_s": 0.6,
+          "demand_rps": 1.0,
+          "observed_throughput_rps": 3761.717748624652,
+          "latency_ms": {
+            "mean": 0.26556000011623837,
+            "p50": 0.26556000011623837,
+            "p95": 0.26556000011623837,
+            "p99": 0.26556000011623837,
+            "max": 0.26556000011623837
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "burst-1",
+          "pattern": "burst",
+          "include_in_metrics": true,
+          "duration_s": 0.6,
+          "demand_rps": 40.0,
+          "observed_throughput_rps": 41.73043627941145,
+          "latency_ms": {
+            "mean": 0.2744576250108821,
+            "p50": 0.26377699998647586,
+            "p95": 0.38423299989744925,
+            "p99": 0.4172494100498625,
+            "max": 0.4253300000982563
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "burst-2",
+          "pattern": "burst",
+          "include_in_metrics": true,
+          "duration_s": 0.3,
+          "demand_rps": 220.0,
+          "observed_throughput_rps": 223.050860979443,
+          "latency_ms": {
+            "mean": 0.21398146271221505,
+            "p50": 0.18834299999070936,
+            "p95": 0.3707073001578465,
+            "p99": 0.6483316000003474,
+            "max": 0.7291090000762779
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "burst-3",
+          "pattern": "burst",
+          "include_in_metrics": true,
+          "duration_s": 0.9,
+          "demand_rps": 80.0,
+          "observed_throughput_rps": 81.06364942522269,
+          "latency_ms": {
+            "mean": 0.24337410958065597,
+            "p50": 0.21929999979874992,
+            "p95": 0.42369360007796786,
+            "p99": 0.4721506400892395,
+            "max": 0.5172679998395324
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "burst-4",
+          "pattern": "burst",
+          "include_in_metrics": true,
+          "duration_s": 0.3,
+          "demand_rps": 260.0,
+          "observed_throughput_rps": 263.32443998933667,
+          "latency_ms": {
+            "mean": 0.20238762024896056,
+            "p50": 0.1825699998789787,
+            "p95": 0.3512200999921333,
+            "p99": 0.4838321800116317,
+            "max": 0.5848179998793057
+          },
+          "errors": 0,
+          "saturated": false
+        }
+      ],
+      "saturation_points": [],
+      "failure_modes": []
+    },
+    {
+      "id": "ramp-tenant-rotation",
+      "pattern": "ramp",
+      "total_requests": 250,
+      "included_requests": 249,
+      "success_count": 250,
+      "error_count": 0,
+      "throughput_rps": 42.05651806933312,
+      "error_rate": 0.0,
+      "metrics": {
+        "latency_ms": {
+          "mean": 0.28884977108916415,
+          "p50": 0.236951000033514,
+          "p95": 0.48214560001724743,
+          "p99": 0.7036857999446524,
+          "max": 7.728879000069355
+        }
+      },
+      "stage_metrics": [
+        {
+          "name": "warmup",
+          "pattern": "warmup",
+          "include_in_metrics": false,
+          "duration_s": 0.9,
+          "demand_rps": 1.0,
+          "observed_throughput_rps": 0.0,
+          "latency_ms": {
+            "mean": 0.3871050000725518,
+            "p50": 0.3871050000725518,
+            "p95": 0.3871050000725518,
+            "p99": 0.3871050000725518,
+            "max": 0.3871050000725518
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "ramp-1",
+          "pattern": "ramp",
+          "include_in_metrics": true,
+          "duration_s": 3.0,
+          "demand_rps": 129.94565217391303,
+          "observed_throughput_rps": 31.23376948414533,
+          "latency_ms": {
+            "mean": 0.2852048695682124,
+            "p50": 0.26804900005572563,
+            "p95": 0.49233964999757523,
+            "p99": 0.6470698500311305,
+            "max": 0.7668849998481164
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "ramp-2",
+          "pattern": "ramp",
+          "include_in_metrics": true,
+          "duration_s": 1.8,
+          "demand_rps": 222.68571428571457,
+          "observed_throughput_rps": 55.89839110203893,
+          "latency_ms": {
+            "mean": 0.2375651099919196,
+            "p50": 0.2179434999334262,
+            "p95": 0.42208305012536573,
+            "p99": 0.49500502010005226,
+            "max": 0.5028279999805818
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "ramp-3",
+          "pattern": "ramp",
+          "include_in_metrics": true,
+          "duration_s": 1.2,
+          "demand_rps": 198.18713450292407,
+          "observed_throughput_rps": 49.27398274504384,
+          "latency_ms": {
+            "mean": 0.38470585967955057,
+            "p50": 0.23314600002777297,
+            "p95": 0.5306933998781462,
+            "p99": 3.8819786001204037,
+            "max": 7.728879000069355
+          },
+          "errors": 0,
+          "saturated": false
+        }
+      ],
+      "saturation_points": [],
+      "failure_modes": []
+    },
+    {
+      "id": "chaos-spike-recovery",
+      "pattern": "spike",
+      "total_requests": 231,
+      "included_requests": 189,
+      "success_count": 231,
+      "error_count": 0,
+      "throughput_rps": 134.97189133236833,
+      "error_rate": 0.0,
+      "metrics": {
+        "latency_ms": {
+          "mean": 0.21490267195509832,
+          "p50": 0.20071800008736318,
+          "p95": 0.39657699999224855,
+          "p99": 0.48123080007826524,
+          "max": 0.805811999953221
+        }
+      },
+      "stage_metrics": [
+        {
+          "name": "warmup",
+          "pattern": "warmup",
+          "include_in_metrics": false,
+          "duration_s": 0.75,
+          "demand_rps": 1.0,
+          "observed_throughput_rps": 0.0,
+          "latency_ms": {
+            "mean": 0.2768919998743513,
+            "p50": 0.2768919998743513,
+            "p95": 0.2768919998743513,
+            "p99": 0.2768919998743513,
+            "max": 0.2768919998743513
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "spike-prewarm",
+          "pattern": "spike",
+          "include_in_metrics": false,
+          "duration_s": 0.45,
+          "demand_rps": 90.0,
+          "observed_throughput_rps": 0.0,
+          "latency_ms": {
+            "mean": 0.2321217317363867,
+            "p50": 0.219080000078975,
+            "p95": 0.3508450001845631,
+            "p99": 0.40091360015139804,
+            "max": 0.410810000175843
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "spike",
+          "pattern": "spike",
+          "include_in_metrics": true,
+          "duration_s": 0.2,
+          "demand_rps": 400.0,
+          "observed_throughput_rps": 404.7004971223552,
+          "latency_ms": {
+            "mean": 0.19847372498986715,
+            "p50": 0.1741485000366083,
+            "p95": 0.31328120003308857,
+            "p99": 0.4930691700747023,
+            "max": 0.805811999953221
+          },
+          "errors": 0,
+          "saturated": false
+        },
+        {
+          "name": "spike-recovery",
+          "pattern": "spike",
+          "include_in_metrics": true,
+          "duration_s": 1.2,
+          "demand_rps": 90.0,
+          "observed_throughput_rps": 90.80916992131185,
+          "latency_ms": {
+            "mean": 0.2269606146818735,
+            "p50": 0.20716800008813152,
+            "p95": 0.4072846000781282,
+            "p99": 0.4750516000785865,
+            "max": 0.5255300000044372
+          },
+          "errors": 0,
+          "saturated": false
+        }
+      ],
+      "saturation_points": [],
+      "failure_modes": []
+    }
+  ]
+}

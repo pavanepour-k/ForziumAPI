@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "stages": {
+    "L1": {
+      "name": "pull_request",
+      "cadence": "per-pr",
+      "description": "Fast validation for pull requests covering unit regressions, FastAPI snapshot parity, and CLI smoke flows. Executes within minutes to provide rapid developer feedback.",
+      "triggers": ["github.pull_request"],
+      "expected_runtime_minutes": 18,
+      "checks": [
+        {
+          "id": "unit_core",
+          "description": "Core HTTP/runtime unit coverage for hot paths.",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_api.py",
+            "tests/test_dependency_injection.py",
+            "tests/test_rust_routes.py"
+          ]
+        },
+        {
+          "id": "fastapi_parity",
+          "description": "FastAPI snapshot and response normalization parity suite.",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_fastapi_parity.py",
+            "tests/test_response_endpoint.py",
+            "tests/test_request_response.py"
+          ]
+        },
+        {
+          "id": "cli_smoke",
+          "description": "CLI scaffolding and run smoke checks to keep templates healthy.",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_cli.py",
+            "tests/test_cli_run.py",
+            "tests/test_cli_plugins.py"
+          ]
+        }
+      ],
+      "artifacts": ["tests/.artifacts"]
+    },
+    "L2": {
+      "name": "daily",
+      "cadence": "daily",
+      "description": "Daily automation exercising scaled load scenarios, observability readiness, and regression gating with persisted metrics.",
+      "triggers": ["schedule.daily"],
+      "expected_runtime_minutes": 45,
+      "checks": [
+        {
+          "id": "load_subset",
+          "description": "Run scaled deterministic scenarios to track latency/throughput drift.",
+          "command": [
+            "python",
+            "scripts/load_suite.py",
+            "--scenario-file",
+            "scenarios/release_v0_1_4.json",
+            "--duration-scale",
+            "0.01",
+            "--max-requests",
+            "250",
+            "--service-time-ms",
+            "8",
+            "--jitter-ms",
+            "1",
+            "--persist"
+          ],
+          "produces": ["metrics/load_suite_report.json"]
+        },
+        {
+          "id": "observability_checks",
+          "description": "Validate readiness gates and telemetry emission remain stable.",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_request_observability.py",
+            "tests/test_observability_readiness.py",
+            "tests/test_observability_shutdown.py",
+            "tests/test_streaming_metrics.py"
+          ]
+        },
+        {
+          "id": "regression_gate",
+          "description": "Execute PyO3 regression gate against baseline metrics.",
+          "command": [
+            "python",
+            "scripts/benchmark_regression.py",
+            "--duration",
+            "5",
+            "--concurrency",
+            "12",
+            "--policy",
+            "gating.yaml",
+            "--report",
+            "artifacts/regression_report.html",
+            "--metrics-out",
+            "artifacts/regression_metrics.json"
+          ],
+          "produces": [
+            "artifacts/regression_report.html",
+            "artifacts/regression_metrics.json"
+          ]
+        }
+      ],
+      "artifacts": [
+        "metrics/load_suite_report.json",
+        "artifacts/regression_report.html",
+        "artifacts/regression_metrics.json"
+      ]
+    },
+    "L3": {
+      "name": "nightly",
+      "cadence": "nightly",
+      "description": "Nightly exhaustive validation executing stress, soak, and chaos suites while packaging long-form reports for release managers.",
+      "triggers": ["schedule.nightly"],
+      "expected_runtime_minutes": 180,
+      "checks": [
+        {
+          "id": "stress_full_suite",
+          "description": "Full regression pytest selection for load/stress behaviour.",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_load_suite.py",
+            "tests/test_benchmark_regression.py",
+            "tests/test_benchmark_numa.py"
+          ]
+        },
+        {
+          "id": "soak_and_failover",
+          "description": "Long-running soak stability and failover chaos coverage.",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_soak_stability.py",
+            "tests/test_failover_chaos.py",
+            "tests/test_graceful_shutdown.py"
+          ]
+        },
+        {
+          "id": "artifact_packaging",
+          "description": "Assemble nightly artifact bundle for downstream auditing.",
+          "command": [
+            "python",
+            "scripts/prepare_ci_artifacts.py",
+            "--retention-days",
+            "30"
+          ],
+          "produces": [
+            "artifacts/ci/manifest.json",
+            "artifacts/ci/RETENTION.txt"
+          ]
+        },
+        {
+          "id": "release_gate_simulation",
+          "description": "Re-run release gate to ensure nightly build remains tag-ready.",
+          "command": [
+            "python",
+            "scripts/release_gate.py",
+            "--checklist",
+            "docs/release_checklist.yaml",
+            "--json",
+            "artifacts/release_gate.json"
+          ],
+          "produces": [
+            "artifacts/release_gate.json",
+            "artifacts/regression_report.html"
+          ]
+        }
+      ],
+      "artifacts": [
+        "metrics/stability_report.json",
+        "metrics/soak_reference_timeseries.json",
+        "metrics/chaos_failover_reference.json",
+        "metrics/load_suite_report.json",
+        "artifacts/ci/manifest.json",
+        "artifacts/ci/RETENTION.txt",
+        "artifacts/regression_report.html",
+        "artifacts/release_gate.json"
+      ]
+    }
+  }
+}

@@ -11,6 +11,7 @@ from .security import (
     assign_role,
     define_role,
     delete_role,
+    revoke_permission,
     get_audit_log,
     list_roles,
     list_user_roles,
@@ -63,6 +64,14 @@ def delete_role_assignment(payload: dict[str, Any]) -> dict[str, str]:
     """Remove a role from a user."""
 
     remove_role(payload.get("user", ""), payload.get("role", ""))
+    return {"status": "ok"}
+
+
+@router.delete("/permissions")
+def delete_permission(payload: dict[str, Any]) -> dict[str, str]:
+    """Revoke a permission from a role."""
+
+    revoke_permission(payload.get("role", ""), payload.get("permission", ""))
     return {"status": "ok"}
 
 

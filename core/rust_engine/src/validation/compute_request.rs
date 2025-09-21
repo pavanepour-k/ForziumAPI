@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn valid_request() {
-        Python::attach(|py| {
+        Python::with_gil(|py| {
             let schema = ComputeRequestSchema::new();
             let data = PyDict::new(py);
             data.set_item("data", vec![vec![1.0, 2.0], vec![3.0, 4.0]])
@@ -73,12 +73,34 @@ mod tests {
 
     #[test]
     fn invalid_matrix() {
-        Python::attach(|py| {
+        Python::with_gil(|py| {
             let schema = ComputeRequestSchema::new();
             let data = PyDict::new(py);
             data.set_item("data", vec![vec![1.0], vec![2.0, 3.0]])
                 .unwrap();
             data.set_item("operation", "add").unwrap();
+            assert!(schema.validate(py, &data).is_err());
+        });
+    }
+
+    #[test]
+    fn missing_operation() {
+        Python::with_gil(|py| {
+            let schema = ComputeRequestSchema::new();
+            let data = PyDict::new(py);
+            data.set_item("data", vec![vec![1.0, 2.0]]).unwrap();
+            assert!(schema.validate(py, &data).is_err());
+        });
+    }
+
+    #[test]
+    fn invalid_parameters_type() {
+        Python::with_gil(|py| {
+            let schema = ComputeRequestSchema::new();
+            let data = PyDict::new(py);
+            data.set_item("data", vec![vec![1.0, 2.0]]).unwrap();
+            data.set_item("operation", "add").unwrap();
+            data.set_item("parameters", 42).unwrap();
             assert!(schema.validate(py, &data).is_err());
         });
     }

@@ -5,10 +5,9 @@ import json
 
 import pytest
 
+pytest.importorskip("google.protobuf")
 from interfaces.grpc import forzium_pb2
 from interfaces.grpc.server import ForziumServicer
-
-pytest.importorskip("google.protobuf")
 
 def test_grpc_servicer() -> None:
     servicer = ForziumServicer()

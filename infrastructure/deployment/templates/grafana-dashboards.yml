@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: forzium-dashboards
+    orgId: 1
+    folder: Forzium
+    type: file
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

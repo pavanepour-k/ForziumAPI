@@ -2,9 +2,10 @@
 
 import json
 
+import pytest
 import forzium_engine
 from infrastructure.configuration import load_settings
-from infrastructure.deployment import build, run
+from infrastructure.deployment import build, deployment_check, run
 from infrastructure.monitoring import (
     export_traces,
     get_current_span_id,
@@ -19,17 +20,45 @@ from infrastructure.monitoring import (
 
 def test_load_settings_env(monkeypatch) -> None:
     """Environment variables override defaults."""
-    monkeypatch.setenv("FORZIUM_ENV", "prod")
+    monkeypatch.setenv("FORZIUM_ENV", "dev")
     monkeypatch.setenv("FORZIUM_DEBUG", "1")
     settings = load_settings()
-    assert settings.environment == "prod"
+    assert settings.environment == "dev"
     assert settings.debug is True
+
+
+def test_load_settings_validation(monkeypatch) -> None:
+    """Invalid combinations raise errors."""
+    monkeypatch.setenv("FORZIUM_ENV", "prod")
+    monkeypatch.setenv("FORZIUM_DEBUG", "1")
+    with pytest.raises(ValueError):
+        load_settings()
+    monkeypatch.setenv("FORZIUM_ENV", "stage")
+    monkeypatch.delenv("FORZIUM_DEBUG", raising=False)
+    with pytest.raises(ValueError):
+        load_settings()
 
 
 def test_deployment_commands() -> None:
     """Build and run return expected command lists."""
     assert build("img") == ["docker", "build", "-t", "img", "."]
     assert run("img") == ["docker", "run", "--rm", "img"]
+
+
+def test_deployment_check_reports_issues(monkeypatch) -> None:
+    """Missing secrets or bad settings surface as issues."""
+    monkeypatch.setenv("FORZIUM_ENV", "prod")
+    monkeypatch.delenv("FORZIUM_SECRET", raising=False)
+    issues = deployment_check()
+    assert issues and any("FORZIUM_SECRET" in msg for msg in issues)
+
+
+def test_deployment_check_ok(monkeypatch) -> None:
+    """Valid production settings return no issues."""
+    monkeypatch.setenv("FORZIUM_ENV", "prod")
+    monkeypatch.setenv("FORZIUM_SECRET", "s3cr3t")
+    issues = deployment_check()
+    assert issues == []
 
 
 def test_monitoring_metrics() -> None:

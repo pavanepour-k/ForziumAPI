@@ -1,0 +1,65 @@
+{
+  "metadata": {
+    "scenario": "staging-nightly-soak",
+    "started_at": "2025-09-19T05:00:00Z",
+    "finished_at": "2025-09-19T11:00:00Z",
+    "interval_seconds": 3600,
+    "notes": "Synthetic reference trace derived from staging soak automation"
+  },
+  "config": {
+    "min_duration_hours": 6.0,
+    "rss_drift_budget_bytes": 12582912,
+    "max_container_restarts": 0
+  },
+  "samples": [
+    {
+      "timestamp": "2025-09-19T05:00:00Z",
+      "rss_bytes": 536870912,
+      "container_restarts": 0,
+      "spans_started": 0,
+      "spans_closed": 0
+    },
+    {
+      "timestamp": "2025-09-19T06:00:00Z",
+      "rss_bytes": 540016640,
+      "container_restarts": 0,
+      "spans_started": 1800,
+      "spans_closed": 1800
+    },
+    {
+      "timestamp": "2025-09-19T07:00:00Z",
+      "rss_bytes": 544604160,
+      "container_restarts": 0,
+      "spans_started": 3600,
+      "spans_closed": 3600
+    },
+    {
+      "timestamp": "2025-09-19T08:00:00Z",
+      "rss_bytes": 547356672,
+      "container_restarts": 0,
+      "spans_started": 5400,
+      "spans_closed": 5400
+    },
+    {
+      "timestamp": "2025-09-19T09:00:00Z",
+      "rss_bytes": 543162368,
+      "container_restarts": 0,
+      "spans_started": 7200,
+      "spans_closed": 7200
+    },
+    {
+      "timestamp": "2025-09-19T10:00:00Z",
+      "rss_bytes": 539910144,
+      "container_restarts": 0,
+      "spans_started": 9000,
+      "spans_closed": 9000
+    },
+    {
+      "timestamp": "2025-09-19T11:00:00Z",
+      "rss_bytes": 538968064,
+      "container_restarts": 0,
+      "spans_started": 10800,
+      "spans_closed": 10800
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 use crate::bindings::{error_handlers::map_error, type_converters::py_list_to_vec_i64};
-use crate::error::{catch_unwind_py, ForziumError};
+use crate::error::{ForziumError, catch_unwind_py};
 
 /// Sum a list of integers passed from Python.
 #[pyfunction]

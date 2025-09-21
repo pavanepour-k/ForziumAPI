@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn multiply_works() {
-        Python::attach(|py| {
+        Python::with_gil(|py| {
             let engine = ComputeEngine::new();
             let params = PyDict::new(py);
             params.set_item("factor", 2.0).unwrap();
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn unsupported_op_errors() {
-        Python::attach(|py| {
+        Python::with_gil(|py| {
             let engine = ComputeEngine::new();
             let params = PyDict::new(py);
             let err = engine

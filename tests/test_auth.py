@@ -35,7 +35,7 @@ def test_jwt_auth_middleware() -> None:
 
 
 def test_jwt_scopes_and_refresh() -> None:
-    payload = {"user": "bob", "scopes": ["read"]}
+    payload = {"user": "bob", "scopes": ["read", "refresh"]}
     access = create_jwt(payload, "a")
     refresh = create_jwt(payload, "r")
     assert authorize_scopes(access, "a", ["read"])

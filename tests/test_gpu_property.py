@@ -2,12 +2,11 @@
 """Property-based tests for GPU helpers."""
 
 import pytest
-from hypothesis import assume, given
-from hypothesis import strategies as st
-
-from core.service.gpu import elementwise_add, elementwise_mul
 
 hypothesis = pytest.importorskip("hypothesis")
+from hypothesis import assume, given, strategies as st
+
+from core.service.gpu import elementwise_add, elementwise_mul
 
 pytestmark = pytest.mark.xfail(
     reason="GPU property operations not yet stable", strict=False

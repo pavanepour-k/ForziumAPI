@@ -539,9 +539,12 @@ class StaticFilesMiddleware(BaseHTTPMiddleware):
             file_path = file_path / "index.html"
         if not file_path.exists():
             return body, params, query, (404, "not found", {})
-        content = file_path.read_text()
+        content = file_path.read_bytes()
         media_type = mimetypes.guess_type(str(file_path))[0] or "text/plain"
-        headers = {"content-type": media_type}
+        headers = {
+            "content-type": media_type,
+            "content-length": str(len(content)),
+        }
         return body, params, query, (200, content, headers)
 
 

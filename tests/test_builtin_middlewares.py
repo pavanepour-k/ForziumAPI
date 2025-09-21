@@ -1,5 +1,6 @@
 """Test built-in middleware implementations."""
 
+import base64
 import gzip
 from pathlib import Path
 
@@ -183,6 +184,10 @@ def test_trusted_host_middleware() -> None:
 def test_static_files_middleware(tmp_path: Path) -> None:
     root = tmp_path
     (root / "hello.txt").write_text("hello")
+    png_data = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAF/gL+X0VdkgAAAABJRU5ErkJggg=="
+    )
+    (root / "tiny.png").write_bytes(png_data)
     app = ForziumApp()
     calls: list[str] = []
 
@@ -208,8 +213,16 @@ def test_static_files_middleware(tmp_path: Path) -> None:
 
     status, body, headers = handler(b"", ("static/hello.txt",), b"")
     assert status == 200
-    assert body == "hello"
+    assert body == b"hello"
     assert headers["content-type"] == "text/plain"
+    assert headers["content-length"] == str(len(body))
+    assert calls == []
+
+    status, image_body, image_headers = handler(b"", ("static/tiny.png",), b"")
+    assert status == 200
+    assert image_body == png_data
+    assert image_headers["content-type"] == "image/png"
+    assert image_headers["content-length"] == str(len(png_data))
     assert calls == []
 
     status, _, _ = handler(b"", ("static/missing.txt",), b"")

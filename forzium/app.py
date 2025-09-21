@@ -1532,6 +1532,23 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     )
                     return duration_ms
 
+                def calculate_body_length(body_obj: Any) -> int | None:
+                    if isinstance(body_obj, bytes):
+                        return len(body_obj)
+                    if isinstance(body_obj, str):
+                        return len(body_obj.encode())
+                    if isinstance(body_obj, list):
+                        total = 0
+                        for part in body_obj:
+                            if isinstance(part, bytes):
+                                total += len(part)
+                            elif isinstance(part, str):
+                                total += len(part.encode())
+                            else:
+                                return None
+                        return total
+                    return None
+
                 def schedule_background(
                     factory: Callable[[], Coroutine[Any, Any, Any]]
                 ) -> None:
@@ -1559,14 +1576,17 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 for req_hook in self._request_hooks:
                     body, params, query, resp = req_hook(body, params, query)
                     if resp is not None:
-                        status, body_str, hook_headers = resp
+                        status, body_obj, hook_headers = resp
                         for resp_hook in self._response_hooks:
-                            status, body_str, hook_headers = resp_hook(
-                                status, body_str, hook_headers
+                            status, body_obj, hook_headers = resp_hook(
+                                status, body_obj, hook_headers
                             )
                         hook_headers = apply_push_headers(status, hook_headers)
-                        finalize_metrics(status, response_length=len(body_str.encode()))
-                        return status, body_str, hook_headers
+                        finalize_metrics(
+                            status,
+                            response_length=calculate_body_length(body_obj),
+                        )
+                        return status, body_obj, hook_headers
 
                 kwargs = {}
                 for name, value in zip(param_names, params):

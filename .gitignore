@@ -16,6 +16,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+target/
 
 # PEP 582
 __pypackages__/

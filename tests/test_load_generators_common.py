@@ -47,6 +47,15 @@ def scenario_file(tmp_path: Path) -> Path:
     return path
 
 
+def test_load_runtime_from_file_end_to_end(scenario_file: Path) -> None:
+    """Ensure scenarios load through ``scripts.load_suite`` and build runtimes."""
+
+    runtime = load_runtime_from_file(scenario_file, "steady-mini", duration_scale=1.0)
+    assert runtime.scenario.identifier == "steady-mini"
+    assert runtime.plan.entries, "expected plan entries to be materialised"
+    assert runtime.plan.entries[0].stage == "warmup"
+
+
 def _perf_counter(values: list[float]) -> Callable[[], float]:
     """Return a perf_counter stub that steps through ``values`` then repeats."""
 

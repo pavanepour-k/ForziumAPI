@@ -19,7 +19,7 @@
             "body",
             "qty"
           ],
-          "msg": "Input should be a valid integer, unable to parse string as an integer",
+          "msg": "value is not a valid integer",
           "input": "bad"
         }
       ]

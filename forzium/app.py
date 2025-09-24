@@ -243,7 +243,7 @@ def _coerce_value(value: Any, tp: Any, loc: list[Any] | None = None) -> Any:
         except (TypeError, ValueError):  # noqa: BLE001
             raise RequestValidationError(
                 loc,
-                "Input should be a valid integer, unable to parse string as an integer",
+                "value is not a valid integer",
                 "int_parsing",
                 input_value=value,
             )
@@ -253,7 +253,7 @@ def _coerce_value(value: Any, tp: Any, loc: list[Any] | None = None) -> Any:
         except (TypeError, ValueError):  # noqa: BLE001
             raise RequestValidationError(
                 loc,
-                "Input should be a valid number, unable to parse string as a number",
+                "value is not a valid float",
                 "float_parsing",
                 input_value=value,
             )
@@ -267,7 +267,7 @@ def _coerce_value(value: Any, tp: Any, loc: list[Any] | None = None) -> Any:
             return False
         raise RequestValidationError(
             loc,
-            "Input should be a valid boolean, unable to interpret input",
+            "value could not be parsed to a boolean",
             "bool_parsing",
             input_value=value,
         )

@@ -2093,19 +2093,19 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 async def call_next_async(r: Request) -> HTTPResponse:
                     q = r.url.split("?", 1)[1] if "?" in r.url else ""
                     result = nxt(r._body, params, q.encode(), r.headers)
-                    if inspect.iscoroutine(result):
-                        result = await result
+                    if inspect.isawaitable(result):
+                        result = await cast(Awaitable[Any], result)
                     if isinstance(result, HTTPResponse):
                         return result
                     st, bd, hd = result
                     return HTTPResponse(bd, status_code=st, headers=hd)
 
-                call_next = (
-                    call_next_async
-                    if inspect.iscoroutinefunction(mw)
-                    else call_next_sync
+                mw_callable = getattr(mw, "__call__", mw)
+                is_async_middleware = inspect.iscoroutinefunction(mw) or inspect.iscoroutinefunction(  # type: ignore[arg-type]
+                    mw_callable
                 )
-
+                call_next = call_next_async if is_async_middleware else call_next_sync
+                
                 res = mw(req, call_next)
                 if inspect.isawaitable(res):
                     if isinstance(res, asyncio.Task):

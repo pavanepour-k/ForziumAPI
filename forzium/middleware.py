@@ -517,6 +517,8 @@ class RateLimitMiddleware:
     ) -> tuple[bool, float, int, float]:
         key = self._key_for(request)
         now = self._timer()
+        should_log = False
+        result: tuple[bool, float, int, float]
         with self._lock:
             bucket = self._history[key]
             cutoff = now - self.window
@@ -524,12 +526,19 @@ class RateLimitMiddleware:
                 bucket.popleft()
             if len(bucket) >= self.limit:
                 retry_after = (bucket[0] + self.window) - now
+                retry_after = max(0.0, retry_after)
                 reset = max(0.0, retry_after)
-                return False, max(0.0, retry_after), 0, reset
-            bucket.append(now)
-            remaining = max(0, self.limit - len(bucket))
-            reset = (bucket[0] + self.window) - now if bucket else self.window
-            return True, 0.0, remaining, max(0.0, reset)
+                result = (False, retry_after, 0, reset)
+                should_log = True
+            else:
+                bucket.append(now)
+                remaining = max(0, self.limit - len(bucket))
+                reset = (bucket[0] + self.window) - now if bucket else self.window
+                result = (True, 0.0, remaining, max(0.0, reset))
+        if should_log:
+            _, retry_after, remaining, reset = result
+            self._log_rejection(request, retry_after, remaining, reset)
+        return result
 
     def _attach_headers(self, response: HTTPResponse, remaining: int, reset: float) -> None:
         headers = getattr(response, "headers", None)
@@ -548,7 +557,6 @@ class RateLimitMiddleware:
         if not allowed:
             retry_after_seconds = max(0.0, retry_after)
             retry_after_header = str(max(0, math.ceil(retry_after_seconds)))
-            self._log_rejection(request, retry_after_seconds, remaining, reset)
             self._record_rejection_metric()
             headers = {
                 "retry-after": retry_after_header,

@@ -278,7 +278,7 @@ class BackgroundTask:
                 getattr(self.func, "__qualname__", repr(self.func)),
                 exc_info=True,
             )
-
+            raise
 
 class BackgroundTasks:
     """Collection of background tasks."""
@@ -362,7 +362,13 @@ class Response:
     async def run_background(self) -> None:
         """Execute any attached background task."""
         if self.background is not None:
-            await self.background()
+            try:
+                await self.background()
+            except Exception:
+                logging.getLogger("forzium").error(
+                    "Background execution raised an exception",
+                    exc_info=True,
+                )
 
 
 __all__ = [

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import pkgutil
 import subprocess  # nosec B404
@@ -19,6 +20,9 @@ from types import ModuleType
 from typing import Any
 from datetime import datetime, timezone
 from textwrap import dedent
+
+
+LOGGER = logging.getLogger("forzium.cli")
 
 def _run(cmd: list[str]) -> None:
     if os.getenv("FORZIUM_DRYRUN"):
@@ -112,7 +116,7 @@ def _start_server(loaded: LoadedApp, host: str, port: int, *, block: bool) -> No
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("Server stopped.")
+        LOGGER.info("Server stopped.")
     finally:
         with suppress(Exception):
             loaded.server.shutdown()

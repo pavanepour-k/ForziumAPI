@@ -19,12 +19,15 @@ from typing import (
     Dict,
     List,
     Tuple,
+    TypeVar,
     cast,
     get_args,
     get_origin,
     get_type_hints,
 )
 from urllib.parse import parse_qs
+
+T = TypeVar("T")
 
 from infrastructure.monitoring import (
     current_trace_span,
@@ -55,21 +58,23 @@ _LOGGER = logging.getLogger("forzium")
 try:
     from pydantic import BaseModel as PydanticBaseModel
     from pydantic import ValidationError as PydanticValidationError
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
+except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+    if exc.name not in {"pydantic", "pydantic.v1"}:
+        raise
     _LOGGER.warning(
         "Pydantic is unavailable; request validation will be limited.",
         exc_info=True,
     )
     PydanticBaseModel = None  # type: ignore[assignment]
     PydanticValidationError = None  # type: ignore[assignment]
-except ImportError:  # pragma: no cover - optional dependency misconfiguration
+except ImportError:
     _LOGGER.error(
         "Pydantic import failed due to an ImportError; request validation will be disabled.",
         exc_info=True,
     )
     PydanticBaseModel = None  # type: ignore[assignment]
     PydanticValidationError = None  # type: ignore[assignment]
-    
+
 TypeAdapter = None  # type: ignore[assignment]
 if PydanticBaseModel is not None:  # pragma: no branch - cache probe
     import pydantic  # type: ignore  # noqa: WPS433 (runtime optional dependency)
@@ -78,6 +83,17 @@ if PydanticBaseModel is not None:  # pragma: no branch - cache probe
 
 _TYPE_ADAPTER_CACHE: dict[Any, Any] = {}
 _ADAPTER_UNAVAILABLE = object()
+
+_CANONICAL_TYPE_ADAPTER_ERRORS: dict[str, tuple[str, str]] = {
+    "type_error.integer": ("int_parsing", "value is not a valid integer"),
+    "int_parsing": ("int_parsing", "value is not a valid integer"),
+    "type_error.float": ("float_parsing", "value is not a valid float"),
+    "float_parsing": ("float_parsing", "value is not a valid float"),
+    "type_error.bool": ("bool_parsing", "value is not a valid boolean"),
+    "bool_parsing": ("bool_parsing", "value is not a valid boolean"),
+    "value_error.bool": ("bool_parsing", "value is not a valid boolean"),
+    "bool_type": ("bool_parsing", "value is not a valid boolean"),
+}
 
 
 def _get_type_adapter(tp: Any) -> Any | None:
@@ -113,11 +129,17 @@ def _validate_with_type_adapter(value: Any, tp: Any, loc: list[Any]) -> Any:
             input_value = err.get("input")
             if input_value == {}:
                 input_value = None
+            err_type = err.get("type", "value_error")
+            override = _CANONICAL_TYPE_ADAPTER_ERRORS.get(err_type)
+            if override is not None:
+                err_type, err_msg = override
+            else:
+                err_msg = err.get("msg", "")
             errors.append(
                 {
                     "loc": base_loc + err_loc,
-                    "msg": err.get("msg", ""),
-                    "type": err.get("type", "value_error"),
+                    "msg": err_msg,
+                    "type": err_type,
                     "input": input_value,
                 }
             )
@@ -178,6 +200,10 @@ try:
 
     _GRAPHQL_AVAILABLE = True
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    _LOGGER.warning(
+        "GraphQL support is disabled because the `graphql-core` package is missing.",
+        exc_info=True,
+    )
     ExecutionResult = GraphQLObjectType = GraphQLSchema = None  # type: ignore[assignment]
     graphql_sync = parse = subscribe = None  # type: ignore[assignment]
     _GRAPHQL_AVAILABLE = False
@@ -275,7 +301,7 @@ def _coerce_value(value: Any, tp: Any, loc: list[Any] | None = None) -> Any:
             return False
         raise RequestValidationError(
             loc,
-            "value could not be parsed to a boolean",
+            "value is not a valid boolean",
             "bool_parsing",
             input_value=value,
         )
@@ -473,7 +499,6 @@ class ForziumApp:
             type[Exception], Callable[[Request, Exception], Any]
         ] = {}
         self._configure_rate_limit_from_env()
-        self._register_observability_routes()
 
     def _configure_rate_limit_from_env(self) -> None:
         value = os.getenv("FORZIUM_RATE_LIMIT")
@@ -580,6 +605,18 @@ class ForziumApp:
             if cls in self.exception_handlers:
                 return self.exception_handlers[cls]
         return None
+
+    @staticmethod
+    def _run_or_schedule(
+        coro: Coroutine[Any, Any, T]
+    ) -> T | asyncio.Task[T]:
+        """Execute *coro* immediately when no event loop is active."""
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        return loop.create_task(coro)
 
     @staticmethod
     def _choose_media(accept: str | None) -> str | None:
@@ -1572,7 +1609,9 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     def runner() -> None:
                         # Allow response serialization to complete before running tasks.
                         time.sleep(0.001)
-                        asyncio.run(factory())
+                        result = self._run_or_schedule(factory())
+                        if isinstance(result, asyncio.Task):
+                            result.add_done_callback(lambda _: None)
 
                     thread = threading.Thread(target=runner, daemon=True)
                     thread.start()
@@ -2001,13 +2040,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
             Tuple[int, str | bytes | list[str], dict[str, str]]
         ]:
             coro = handler_async(body, params, query, headers)
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                # No running loop, execute coroutine synchronously.
-                return asyncio.run(coro)
-            # Reuse the active loop by scheduling the coroutine as a task.
-            return asyncio.create_task(coro)
+            return self._run_or_schedule(coro)
 
         handler = self._apply_asgi_middleware(
             handler, param_names, method, path
@@ -2060,33 +2093,32 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 async def call_next_async(r: Request) -> HTTPResponse:
                     q = r.url.split("?", 1)[1] if "?" in r.url else ""
                     result = nxt(r._body, params, q.encode(), r.headers)
-                    if inspect.iscoroutine(result):
-                        result = await result
+                    if inspect.isawaitable(result):
+                        result = await cast(Awaitable[Any], result)
                     if isinstance(result, HTTPResponse):
                         return result
                     st, bd, hd = result
                     return HTTPResponse(bd, status_code=st, headers=hd)
 
-                call_next = (
-                    call_next_async
-                    if inspect.iscoroutinefunction(mw)
-                    else call_next_sync
+                mw_callable = getattr(mw, "__call__", mw)
+                is_async_middleware = inspect.iscoroutinefunction(mw) or inspect.iscoroutinefunction(  # type: ignore[arg-type]
+                    mw_callable
                 )
-
+                call_next = call_next_async if is_async_middleware else call_next_sync
+                
                 res = mw(req, call_next)
                 if inspect.isawaitable(res):
-                    try:
-                        asyncio.get_running_loop()
-                    except RuntimeError:
-                        res = asyncio.run(cast(Coroutine[Any, Any, Any], res))
-                    else:
-                        if isinstance(res, asyncio.Task):
-                            return res
-                        if inspect.iscoroutine(res):
-                            return asyncio.create_task(
-                                cast(Coroutine[Any, Any, Any], res)
-                            )
-                        return asyncio.ensure_future(cast(Awaitable[Any], res))
+                    if isinstance(res, asyncio.Task):
+                        return res
+                    if inspect.iscoroutine(res):
+                        return self._run_or_schedule(
+                            cast(Coroutine[Any, Any, Any], res)
+                        )
+
+                    async def _await_result() -> Any:
+                        return await cast(Awaitable[Any], res)
+
+                    return self._run_or_schedule(_await_result())
                 if isinstance(res, HTTPResponse):
                     st, b, hd = res.serialize()
                     return st, b.decode("latin1"), hd

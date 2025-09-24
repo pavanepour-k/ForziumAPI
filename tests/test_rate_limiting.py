@@ -224,6 +224,7 @@ def test_rate_limit_emits_warning_and_metric(caplog: pytest.LogCaptureFixture) -
     assert get_metric("requests_rate_limited_total") == baseline + 1.0
 
     messages = "\n".join(record.message for record in caplog.records)
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
     assert "rate_limit.blocked" in messages
     assert '"client":"5.5.5.5"' in messages
     assert '"path":"/warn"' in messages

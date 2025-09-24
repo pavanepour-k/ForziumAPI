@@ -29,7 +29,7 @@ def _shutdown_loaded_app(module_name: str) -> None:
         asyncio.run(app.shutdown())
 
 
-def test_start_server_keyboard_interrupt(monkeypatch, capsys) -> None:
+def test_start_server_keyboard_interrupt(monkeypatch, caplog) -> None:
     class DummyServer:
         def __init__(self) -> None:
             self.addresses: list[str] = []
@@ -68,10 +68,11 @@ def test_start_server_keyboard_interrupt(monkeypatch, capsys) -> None:
 
     monkeypatch.setattr(time, "sleep", raise_interrupt)
 
+    caplog.set_level("INFO", logger="forzium.cli")
+
     _start_server(loaded, "127.0.0.1", 9000, block=True)
 
-    captured = capsys.readouterr()
-    assert "Server stopped." in captured.out
+    assert "Server stopped." in caplog.text
     assert server.addresses == ["127.0.0.1:9000"]
     assert server.shutdown_called is True
     assert app.startup_called is True

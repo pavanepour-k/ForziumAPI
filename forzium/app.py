@@ -13,6 +13,7 @@ import time
 from dataclasses import MISSING, fields, is_dataclass
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Coroutine,
     Dict,
@@ -1441,9 +1442,10 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
         ) = None,
     ) -> Callable[
         [bytes, tuple, bytes, dict[str, str] | None],
-        Tuple[int, str | bytes | list[str], dict[str, str]],
+        Tuple[int, str | bytes | list[str], dict[str, str]]
+        | Awaitable[Tuple[int, str | bytes | list[str], dict[str, str]]],
     ]:
-        def handler(
+        async def handler_async(
             body: bytes,
             params: tuple,
             query: bytes,
@@ -1632,7 +1634,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 dep_vals: dict[str, Any] = {}
                 try:
                     with start_span(f"{span_label} dependency_resolution"):
-                        dep_vals, ctx_stack = solve_dependencies(
+                        dep_vals, ctx_stack = await solve_dependencies(
                             dependencies, overrides, req_obj
                         )
                 except Exception as exc:
@@ -1780,8 +1782,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     with start_span(f"{span_label} handler_execution"):
                         result = func(**kwargs)
                         if inspect.isawaitable(result):
-                            result = asyncio.run(
-                                cast(Coroutine[Any, Any, Any], result)
+                            result = await cast(
+                                Coroutine[Any, Any, Any], result
                             )
                 except Exception as exc:
                     handler = self._lookup_handler(exc)
@@ -1831,9 +1833,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 finally:
                     for cleanup, is_async in reversed(ctx_stack):
                         if is_async:
-                            asyncio.run(
-                                cast(Coroutine[Any, Any, Any], cleanup())
-                            )
+                            await cast(Awaitable[Any], cleanup())
                         else:
                             cleanup()
 
@@ -1984,6 +1984,23 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                         exception=exc_info[1],
                     )
                 span_cm.__exit__(*exc_info)
+        
+        def handler(
+            body: bytes,
+            params: tuple,
+            query: bytes,
+            headers: dict[str, str] | None = None,
+        ) -> Tuple[int, str | bytes | list[str], dict[str, str]] | Awaitable[
+            Tuple[int, str | bytes | list[str], dict[str, str]]
+        ]:
+            coro = handler_async(body, params, query, headers)
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop, execute coroutine synchronously.
+                return asyncio.run(coro)
+            # Reuse the active loop by scheduling the coroutine as a task.
+            return asyncio.create_task(coro)
 
         handler = self._apply_asgi_middleware(
             handler, param_names, method, path
@@ -2050,12 +2067,19 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                 )
 
                 res = mw(req, call_next)
-                if inspect.iscoroutine(res):
+                if inspect.isawaitable(res):
                     try:
                         asyncio.get_running_loop()
-                        return res
                     except RuntimeError:
                         res = asyncio.run(cast(Coroutine[Any, Any, Any], res))
+                    else:
+                        if isinstance(res, asyncio.Task):
+                            return res
+                        if inspect.iscoroutine(res):
+                            return asyncio.create_task(
+                                cast(Coroutine[Any, Any, Any], res)
+                            )
+                        return asyncio.ensure_future(cast(Awaitable[Any], res))
                 if isinstance(res, HTTPResponse):
                     st, b, hd = res.serialize()
                     return st, b.decode("latin1"), hd

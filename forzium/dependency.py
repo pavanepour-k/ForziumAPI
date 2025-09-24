@@ -7,7 +7,17 @@ import asyncio
 import inspect
 import json
 from http.cookies import SimpleCookie
-from typing import Any, AsyncIterator, Callable, Dict, List, Mapping, Tuple, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Tuple,
+    cast,
+)
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -173,7 +183,7 @@ class Depends:
         self.dependency = dependency
 
 
-def solve_dependencies(
+async def solve_dependencies(
     dependencies: List[Tuple[str, Callable[..., Any]]],
     overrides: List[Dict[Callable[..., Any], Callable[..., Any]]],
     request: Request | None = None,
@@ -189,7 +199,7 @@ def solve_dependencies(
     cache: Dict[Callable[..., Any], Any] = {}
     cleanup: list[Tuple[Callable[[], Any], bool]] = []
 
-    def resolve(fn: Callable[..., Any]) -> Any:
+    async def resolve(fn: Callable[..., Any]) -> Any:
         actual = fn
         for mapping in overrides:
             if fn in mapping:
@@ -207,13 +217,13 @@ def solve_dependencies(
                 continue
             default = param.default
             if isinstance(default, Depends):
-                kwargs[param.name] = resolve(default.dependency)
+                kwargs[param.name] = await resolve(default.dependency)
         result = actual(**kwargs)
         if inspect.isawaitable(result):
-            result = asyncio.run(cast(Any, result))
+            result = await cast(Awaitable[Any], result)
         elif inspect.isasyncgen(result):
             gen = cast(Any, result)
-            value = asyncio.run(gen.__anext__())
+            value = await gen.__anext__()
             cleanup.append((gen.aclose, True))
             result = value
         elif inspect.isgenerator(result):
@@ -223,10 +233,10 @@ def solve_dependencies(
             result = value
         elif hasattr(result, "__aenter__") and hasattr(result, "__aexit__"):
             cm = result
-            value = asyncio.run(cast(Any, cm.__aenter__()))
+            value = await cast(Awaitable[Any], cm.__aenter__())
 
-            def _async_exit(cm: Any = cm) -> Any:
-                return cm.__aexit__(None, None, None)
+            async def _async_exit(cm: Any = cm) -> Any:
+                return await cm.__aexit__(None, None, None)
 
             cleanup.append((_async_exit, True))
             result = value
@@ -242,7 +252,7 @@ def solve_dependencies(
         cache[actual] = result
         return result
 
-    values = {name: resolve(dep) for name, dep in dependencies}
+    values = {name: await resolve(dep) for name, dep in dependencies}
     return values, cleanup
 
 

@@ -6,12 +6,13 @@ import asyncio
 import sys
 import time
 from importlib import import_module
+from types import ModuleType
 
 import pytest
 
 pytest.importorskip("forzium_engine")
 
-from forzium.cli import main as cli_main
+from forzium.cli import LoadedApp, _start_server, main as cli_main
 from tests.http_client import get
 
 
@@ -26,6 +27,55 @@ def _shutdown_loaded_app(module_name: str) -> None:
     server.shutdown()
     if app is not None and hasattr(app, "shutdown"):
         asyncio.run(app.shutdown())
+
+
+def test_start_server_keyboard_interrupt(monkeypatch, capsys) -> None:
+    class DummyServer:
+        def __init__(self) -> None:
+            self.addresses: list[str] = []
+            self.shutdown_called = False
+
+        def serve(self, address: str) -> None:
+            self.addresses.append(address)
+
+        def shutdown(self) -> None:
+            self.shutdown_called = True
+
+    class DummyApp:
+        def __init__(self) -> None:
+            self.startup_called = False
+            self.shutdown_called = False
+
+        async def startup(self) -> None:
+            self.startup_called = True
+
+        async def shutdown(self) -> None:
+            self.shutdown_called = True
+
+    server = DummyServer()
+    app = DummyApp()
+    module = ModuleType("dummy_module")
+    loaded = LoadedApp(
+        module=module,
+        app=app,
+        server=server,
+        module_name=module.__name__,
+        app_name="app",
+    )
+
+    def raise_interrupt(_: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(time, "sleep", raise_interrupt)
+
+    _start_server(loaded, "127.0.0.1", 9000, block=True)
+
+    captured = capsys.readouterr()
+    assert "Server stopped." in captured.out
+    assert server.addresses == ["127.0.0.1:9000"]
+    assert server.shutdown_called is True
+    assert app.startup_called is True
+    assert app.shutdown_called is True
 
 
 def test_cli_run_starts_server(tmp_path, monkeypatch) -> None:

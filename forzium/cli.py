@@ -112,7 +112,7 @@ def _start_server(loaded: LoadedApp, host: str, port: int, *, block: bool) -> No
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        pass
+        print("Server stopped.")
     finally:
         with suppress(Exception):
             loaded.server.shutdown()

@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 from http.cookies import SimpleCookie
 from typing import (
     Any,
@@ -266,10 +267,17 @@ class BackgroundTask:
         self.is_async = inspect.iscoroutinefunction(func)
 
     async def __call__(self) -> None:
-        if self.is_async:
-            await self.func(*self.args, **self.kwargs)
-        else:
-            await asyncio.to_thread(self.func, *self.args, **self.kwargs)
+        try:
+            if self.is_async:
+                await self.func(*self.args, **self.kwargs)
+            else:
+                await asyncio.to_thread(self.func, *self.args, **self.kwargs)
+        except Exception:
+            logging.getLogger("forzium").error(
+                "Background task %s raised an exception",
+                getattr(self.func, "__qualname__", repr(self.func)),
+                exc_info=True,
+            )
 
 
 class BackgroundTasks:
@@ -296,7 +304,14 @@ class BackgroundTasks:
 
     async def __call__(self) -> None:
         for task in self.tasks:
-            await task()
+            try:
+                await task()
+            except Exception:
+                logging.getLogger("forzium").error(
+                    "Background task %r raised an exception",
+                    task,
+                    exc_info=True,
+                )
 
 
 class Response:

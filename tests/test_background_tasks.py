@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 
 import pytest
 
 from forzium.app import ForziumApp
-from forzium.http import BackgroundTasks, Response
+from forzium.http import BackgroundTask, BackgroundTasks, Response
 
 
 def test_background_tasks_injected_and_run_after_response() -> None:
@@ -40,7 +41,7 @@ def test_background_tasks_injected_and_run_after_response() -> None:
     assert hits == [1]
 
 
-def test_background_tasks_multiple_and_errors() -> None:
+def test_background_tasks_multiple_and_errors(caplog: pytest.LogCaptureFixture) -> None:
     hits: list[int] = []
     tasks = BackgroundTasks()
     tasks.add_task(hits.append, 1)
@@ -55,6 +56,25 @@ def test_background_tasks_multiple_and_errors() -> None:
         raise ValueError("fail")
 
     tasks.add_task(boom)
-    with pytest.raises(ValueError):
+    tasks.add_task(hits.append, 4)
+    with caplog.at_level(logging.ERROR, logger="forzium"):
         asyncio.run(tasks())
-    assert hits == [1, 2, 3]
+    assert hits == [1, 2, 3, 4]
+    error_logs = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.ERROR and "Background task" in record.getMessage()
+    ]
+    assert error_logs, "Background task failure should be logged"
+
+
+async def _async_raise() -> None:
+    raise RuntimeError("boom")
+
+
+def test_async_background_task_logs_error(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.ERROR, logger="forzium")
+    task = BackgroundTask(_async_raise)
+    asyncio.run(task())
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Background task" in msg for msg in messages)

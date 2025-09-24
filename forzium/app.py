@@ -4,6 +4,7 @@
 import asyncio
 import inspect
 import json
+import logging
 import os
 import re
 import sys
@@ -48,10 +49,16 @@ from .middleware import RateLimitMiddleware
 from .responses import HTTPException, StreamingResponse
 from .websockets import WebSocket
 
+_LOGGER = logging.getLogger("forzium")
+
 try:
     from pydantic import BaseModel as PydanticBaseModel
     from pydantic import ValidationError as PydanticValidationError
-except Exception:  # pragma: no cover - optional dependency
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - optional dependency
+    _LOGGER.warning(
+        "Pydantic is unavailable; request validation will be limited.",
+        exc_info=True,
+    )
     PydanticBaseModel = None  # type: ignore[assignment]
     PydanticValidationError = None  # type: ignore[assignment]
 

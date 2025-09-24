@@ -1,8 +1,8 @@
 [project]
 name = "forzium-plugin"
-version = "0.1.1"
+version = "0.1.4"
 description = "Forzium plugin providing scaffold command"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 [project.entry-points."forzium.plugins"]
 scaffold = "forzium_plugin:register"

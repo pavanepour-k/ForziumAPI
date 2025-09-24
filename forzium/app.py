@@ -19,12 +19,15 @@ from typing import (
     Dict,
     List,
     Tuple,
+    TypeVar,
     cast,
     get_args,
     get_origin,
     get_type_hints,
 )
 from urllib.parse import parse_qs
+
+T = TypeVar("T")
 
 from infrastructure.monitoring import (
     current_trace_span,
@@ -602,6 +605,18 @@ class ForziumApp:
             if cls in self.exception_handlers:
                 return self.exception_handlers[cls]
         return None
+
+    @staticmethod
+    def _run_or_schedule(
+        coro: Coroutine[Any, Any, T]
+    ) -> T | asyncio.Task[T]:
+        """Execute *coro* immediately when no event loop is active."""
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        return loop.create_task(coro)
 
     @staticmethod
     def _choose_media(accept: str | None) -> str | None:
@@ -1594,7 +1609,9 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     def runner() -> None:
                         # Allow response serialization to complete before running tasks.
                         time.sleep(0.001)
-                        asyncio.run(factory())
+                        result = self._run_or_schedule(factory())
+                        if isinstance(result, asyncio.Task):
+                            result.add_done_callback(lambda _: None)
 
                     thread = threading.Thread(target=runner, daemon=True)
                     thread.start()
@@ -2023,13 +2040,7 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
             Tuple[int, str | bytes | list[str], dict[str, str]]
         ]:
             coro = handler_async(body, params, query, headers)
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                # No running loop, execute coroutine synchronously.
-                return asyncio.run(coro)
-            # Reuse the active loop by scheduling the coroutine as a task.
-            return asyncio.create_task(coro)
+            return self._run_or_schedule(coro)
 
         handler = self._apply_asgi_middleware(
             handler, param_names, method, path
@@ -2097,18 +2108,17 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
 
                 res = mw(req, call_next)
                 if inspect.isawaitable(res):
-                    try:
-                        asyncio.get_running_loop()
-                    except RuntimeError:
-                        res = asyncio.run(cast(Coroutine[Any, Any, Any], res))
-                    else:
-                        if isinstance(res, asyncio.Task):
-                            return res
-                        if inspect.iscoroutine(res):
-                            return asyncio.create_task(
-                                cast(Coroutine[Any, Any, Any], res)
-                            )
-                        return asyncio.ensure_future(cast(Awaitable[Any], res))
+                    if isinstance(res, asyncio.Task):
+                        return res
+                    if inspect.iscoroutine(res):
+                        return self._run_or_schedule(
+                            cast(Coroutine[Any, Any, Any], res)
+                        )
+
+                    async def _await_result() -> Any:
+                        return await cast(Awaitable[Any], res)
+
+                    return self._run_or_schedule(_await_result())
                 if isinstance(res, HTTPResponse):
                     st, b, hd = res.serialize()
                     return st, b.decode("latin1"), hd

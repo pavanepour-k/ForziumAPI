@@ -19,7 +19,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Iterable
 from urllib.parse import parse_qs
 
-from infrastructure.monitoring import current_trace_span
+from infrastructure.monitoring import (
+    current_trace_span,
+    get_metric,
+    observability_ready,
+    record_metric,
+)
 
 from .dependency import Response as FrameworkResponse
 from .security import authorize_permissions, decode_jwt, log_event
@@ -413,6 +418,8 @@ class RequestLoggerMiddleware:
 class RateLimitMiddleware:
     """Enforce configurable request-per-window limits."""
 
+    _RATE_LIMITED_METRIC = "requests_rate_limited_total"
+
     def __init__(
         self,
         limit: int,
@@ -422,6 +429,7 @@ class RateLimitMiddleware:
         include_path: bool = False,
         identifier: Callable[[Request], str] | None = None,
         timer: Callable[[], float] | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if limit <= 0:
             raise ValueError("limit must be positive")
@@ -435,6 +443,7 @@ class RateLimitMiddleware:
         self._timer = timer or time.monotonic
         self._history: defaultdict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
+        self.logger = logger or logging.getLogger("forzium")
 
     def _client_identifier(self, request: Request) -> str:
         if self._identifier is not None:
@@ -461,6 +470,47 @@ class RateLimitMiddleware:
         url = str(getattr(request, "url", "/"))
         path = url.split("?", 1)[0]
         return f"{base}:{path}" if self.per_client else path
+
+    def _request_path(self, request: Request) -> str:
+        raw = getattr(request, "url", None)
+        if raw:
+            text = str(raw)
+            path = text.split("?", 1)[0]
+            if "//" in path:
+                # Strip scheme and host if a full URL is provided.
+                path = path.split("//", 1)[-1]
+                path = path.partition("/")[2]
+                path = f"/{path}" if not path.startswith("/") else path
+            return path or "/"
+        scope = getattr(request, "scope", None)
+        if isinstance(scope, dict):
+            candidate = scope.get("path")
+            if candidate:
+                return str(candidate)
+        return "/"
+
+    def _log_rejection(
+        self, request: Request, retry_after: float, remaining: int, reset: float
+    ) -> None:
+        client = self._client_identifier(request)
+        path = self._request_path(request)
+        payload = {
+            "event": "rate_limit.blocked",
+            "client": client,
+            "path": path,
+            "limit": self.limit,
+            "window": self.window,
+            "retry_after": round(max(0.0, retry_after), 3),
+            "remaining": max(0, remaining),
+            "reset": max(0.0, reset),
+        }
+        self.logger.warning(json.dumps(payload, separators=(",", ":")))
+
+    def _record_rejection_metric(self) -> None:
+        if not observability_ready():
+            return
+        current = get_metric(self._RATE_LIMITED_METRIC)
+        record_metric(self._RATE_LIMITED_METRIC, current + 1.0)
 
     def _acquire(
         self, request: Request
@@ -498,6 +548,8 @@ class RateLimitMiddleware:
         if not allowed:
             retry_after_seconds = max(0.0, retry_after)
             retry_after_header = str(max(0, math.ceil(retry_after_seconds)))
+            self._log_rejection(request, retry_after_seconds, remaining, reset)
+            self._record_rejection_metric()
             headers = {
                 "retry-after": retry_after_header,
                 "x-ratelimit-limit": str(self.limit),

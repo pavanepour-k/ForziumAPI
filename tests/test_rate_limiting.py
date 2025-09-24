@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import math
 
 import pytest
 
 from forzium import ForziumApp, RateLimitMiddleware, TestClient
+from infrastructure.monitoring import get_metric
 
 
 class ManualClock:
@@ -192,3 +194,36 @@ def test_user_scope_configured_via_environment(monkeypatch: pytest.MonkeyPatch) 
     third = client.get("/tenant", headers=tenant_b)
     assert third.status_code == 200
     assert third.headers["x-ratelimit-remaining"] == "0"
+
+
+def test_rate_limit_emits_warning_and_metric(caplog: pytest.LogCaptureFixture) -> None:
+    clock = ManualClock()
+    app = ForziumApp()
+    limiter = RateLimitMiddleware(
+        limit=1,
+        window=1.0,
+        timer=clock,
+        per_client=True,
+    )
+    app.middleware("http")(limiter)
+
+    @app.get("/warn")
+    def warn_handler() -> dict[str, str]:
+        return {"status": "ok"}
+
+    client = TestClient(app)
+    headers = {"X-Forwarded-For": "5.5.5.5"}
+    baseline = get_metric("requests_rate_limited_total")
+
+    with caplog.at_level(logging.WARNING, logger="forzium"):
+        client.get("/warn", headers=headers)
+        caplog.clear()
+        blocked = client.get("/warn", headers=headers)
+
+    assert blocked.status_code == 429
+    assert get_metric("requests_rate_limited_total") == baseline + 1.0
+
+    messages = "\n".join(record.message for record in caplog.records)
+    assert "rate_limit.blocked" in messages
+    assert '"client":"5.5.5.5"' in messages
+    assert '"path":"/warn"' in messages

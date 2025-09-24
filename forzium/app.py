@@ -180,6 +180,10 @@ try:
 
     _GRAPHQL_AVAILABLE = True
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    _LOGGER.warning(
+        "GraphQL support is disabled because the `graphql-core` package is missing.",
+        exc_info=True,
+    )
     ExecutionResult = GraphQLObjectType = GraphQLSchema = None  # type: ignore[assignment]
     graphql_sync = parse = subscribe = None  # type: ignore[assignment]
     _GRAPHQL_AVAILABLE = False

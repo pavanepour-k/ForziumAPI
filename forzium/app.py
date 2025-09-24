@@ -55,14 +55,21 @@ _LOGGER = logging.getLogger("forzium")
 try:
     from pydantic import BaseModel as PydanticBaseModel
     from pydantic import ValidationError as PydanticValidationError
-except (ModuleNotFoundError, ImportError):  # pragma: no cover - optional dependency
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
     _LOGGER.warning(
         "Pydantic is unavailable; request validation will be limited.",
         exc_info=True,
     )
     PydanticBaseModel = None  # type: ignore[assignment]
     PydanticValidationError = None  # type: ignore[assignment]
-
+except ImportError:  # pragma: no cover - optional dependency misconfiguration
+    _LOGGER.error(
+        "Pydantic import failed due to an ImportError; request validation will be disabled.",
+        exc_info=True,
+    )
+    PydanticBaseModel = None  # type: ignore[assignment]
+    PydanticValidationError = None  # type: ignore[assignment]
+    
 TypeAdapter = None  # type: ignore[assignment]
 if PydanticBaseModel is not None:  # pragma: no branch - cache probe
     import pydantic  # type: ignore  # noqa: WPS433 (runtime optional dependency)

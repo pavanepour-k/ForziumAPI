@@ -81,6 +81,17 @@ if PydanticBaseModel is not None:  # pragma: no branch - cache probe
 _TYPE_ADAPTER_CACHE: dict[Any, Any] = {}
 _ADAPTER_UNAVAILABLE = object()
 
+_CANONICAL_TYPE_ADAPTER_ERRORS: dict[str, tuple[str, str]] = {
+    "type_error.integer": ("int_parsing", "value is not a valid integer"),
+    "int_parsing": ("int_parsing", "value is not a valid integer"),
+    "type_error.float": ("float_parsing", "value is not a valid float"),
+    "float_parsing": ("float_parsing", "value is not a valid float"),
+    "type_error.bool": ("bool_parsing", "value is not a valid boolean"),
+    "bool_parsing": ("bool_parsing", "value is not a valid boolean"),
+    "value_error.bool": ("bool_parsing", "value is not a valid boolean"),
+    "bool_type": ("bool_parsing", "value is not a valid boolean"),
+}
+
 
 def _get_type_adapter(tp: Any) -> Any | None:
     """Return a cached ``TypeAdapter`` for *tp* when available."""
@@ -115,11 +126,17 @@ def _validate_with_type_adapter(value: Any, tp: Any, loc: list[Any]) -> Any:
             input_value = err.get("input")
             if input_value == {}:
                 input_value = None
+            err_type = err.get("type", "value_error")
+            override = _CANONICAL_TYPE_ADAPTER_ERRORS.get(err_type)
+            if override is not None:
+                err_type, err_msg = override
+            else:
+                err_msg = err.get("msg", "")
             errors.append(
                 {
                     "loc": base_loc + err_loc,
-                    "msg": err.get("msg", ""),
-                    "type": err.get("type", "value_error"),
+                    "msg": err_msg,
+                    "type": err_type,
                     "input": input_value,
                 }
             )
@@ -281,7 +298,7 @@ def _coerce_value(value: Any, tp: Any, loc: list[Any] | None = None) -> Any:
             return False
         raise RequestValidationError(
             loc,
-            "value could not be parsed to a boolean",
+            "value is not a valid boolean",
             "bool_parsing",
             input_value=value,
         )

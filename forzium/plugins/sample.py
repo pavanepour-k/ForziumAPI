@@ -1,5 +1,9 @@
 """Sample plugin used for tests."""
 
+import logging
+
+LOGGER = logging.getLogger("forzium.plugins.sample")
+
 
 def register(subparsers) -> None:
     parser = subparsers.add_parser("hello")
@@ -7,4 +11,4 @@ def register(subparsers) -> None:
 
 
 def _run(args) -> None:
-    print("hello plugin")
+    LOGGER.info("hello plugin")

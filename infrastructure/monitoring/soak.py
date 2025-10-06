@@ -3,7 +3,7 @@
 This module loads long-running stability samples collected during nightly soak
 runs and evaluates them against gating thresholds.  The implementation focuses
 on deterministic parsing and reproducible scoring so that release automation can
-assert the acceptance criteria captured in TODO-0022:
+assert the acceptance criteria:
 
 * No container restarts occurred during the soak.
 * Span closure ratio must be 100% (every started span closed).

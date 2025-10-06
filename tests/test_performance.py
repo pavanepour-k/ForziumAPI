@@ -70,8 +70,9 @@ def test_ffi_overhead_validation():
 
 def _py_matmul(a, b):
     return [
-        [sum(x * y for x, y in zip(row, col)) for col in zip(*b)] for row in a
-    ]  # noqa: E501
+        [sum(x * y for x, y in zip(row, col)) for col in zip(*b)] 
+        for row in a
+    ]
 
 
 def test_matmul_parallel_speed():

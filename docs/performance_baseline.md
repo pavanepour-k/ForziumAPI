@@ -1,4 +1,4 @@
-# Performance Baseline (TODO-0008)
+# Performance Baseline
 
 ## Scenario
 

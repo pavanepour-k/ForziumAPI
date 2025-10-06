@@ -1,3 +1,4 @@
+dev.local*
 *.py[codz]
 *$py.class
 .Python

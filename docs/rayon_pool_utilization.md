@@ -52,5 +52,5 @@ refresh the dataset as optimizations land.
 - **Task duration spread** (8.40 µs – 1.10 ms) aligns with mixed kernels (element-wise vs. matmul),
   offering input for future work-size balancing heuristics.
 
-The dataset and module provide the baseline required by TODO-0030, enabling regression tracking and
+The dataset and module provide the baseline for regression tracking and
 surfacing of Rayon pool inefficiencies in future releases.

@@ -1,10 +1,13 @@
 """Run the Forzium application using the Rust HTTP server."""
 
 import argparse
+import logging
 import os
 import time
 
 from core import server
+
+LOGGER = logging.getLogger("forzium.server")
 
 
 def main() -> None:
@@ -22,7 +25,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     server.serve(f"{args.host}:{args.port}")
-    print(f"Forzium server running on {args.host}:{args.port}")
+    LOGGER.info("Forzium server running on %s:%s", args.host, args.port)
     try:
         while True:
             time.sleep(10)

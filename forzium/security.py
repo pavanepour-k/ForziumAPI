@@ -497,7 +497,7 @@ def refresh_and_rotate(
     return new_access, new_refresh
 
 
-API_KEYS = {"secret"}
+API_KEYS = set(os.getenv("FORZIUM_API_KEYS", "").split(",")) if os.getenv("FORZIUM_API_KEYS") else set()
 
 
 def api_key_query(request: Request) -> str:

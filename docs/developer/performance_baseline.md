@@ -31,8 +31,6 @@ Refer to [`metrics/performance_baseline.json`](../metrics/performance_baseline.j
 
 ## δ Policy
 
-The regression gating policy is defined in [`gating.yaml`](../gating.yaml):
-
 - Throughput must not fall more than **5%** below the recorded baseline mean.
 - P95 latency must not exceed the baseline by more than **10%**.
 - Error rate must remain **0** (no allowance for regressions).

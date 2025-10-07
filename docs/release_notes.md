@@ -81,7 +81,7 @@ If you're migrating from FastAPI, the process is straightforward:
 3. **Everything else stays the same!** Your routes, dependencies, and middleware work exactly as before.
 
 ### Version Compatibility
-- **Python**: 3.8+
+- **Python**: 3.12
 - **Dependencies**: Compatible with existing FastAPI dependencies
 - **Migration Time**: Usually less than 5 minutes
 

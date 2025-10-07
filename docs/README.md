@@ -72,7 +72,3 @@ async def compute(payload: dict) -> dict:
 1. **Start with the [User Guide](USER_GUIDE.md)** for detailed examples
 2. **Check [Release Notes](release_notes.md)** for latest changes
 3. **Review [Architecture](architecture.md)** for technical understanding
-
-## Next Steps
-
-Ready to build your first API? Head to the [User Guide](USER_GUIDE.md) to get started with examples and best practices.

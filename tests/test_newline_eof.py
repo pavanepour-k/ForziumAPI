@@ -10,7 +10,6 @@ def test_files_end_with_newline() -> None:
         repo_root / "test_api.py",
         repo_root / "test_integration_server.py",
         repo_root / "test_path_params.py",
-        repo_root / "test_performance.py",
         repo_root / "test_rust_routes.py",
         repo_root / "test_rust_server.py",
         pathlib.Path(__file__),

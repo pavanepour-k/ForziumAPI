@@ -99,7 +99,6 @@ Environment variables `FORZIUM_RATE_LIMIT`, `FORZIUM_RATE_LIMIT_WINDOW`, and `FO
 * **`interfaces/`** – gRPC definitions and shared schema compatibility helpers.
 * **`infrastructure/`** – Monitoring instrumentation, OTLP exporters, and deployment assets.
 * **`docs/`** – User-facing documentation and guides.
-* **`.cursor/`** – Development tools, scripts, and documentation.
 * **`tests/`** – Comprehensive parity, integration, performance, and stress tests.
 
 ---
@@ -132,11 +131,3 @@ For detailed usage instructions, see [User Guide](docs/USER_GUIDE.md).
 * **[Performance Baseline](docs/performance_baseline.md)** - Performance benchmarks
 * **[Release Notes](docs/release_notes.md)** - Version history and changes
 * **[Enterprise Guide](docs/enterprise_adoption_note.md)** - Enterprise deployment guide
-
-## Development
-
-Development tools and documentation are organized in the `.cursor/` directory:
-- `.cursor/scripts/` – Development and testing scripts
-- `.cursor/docs/` – Developer guides and technical documentation
-
-For development setup, see [Developer Guide](.cursor/DEVELOPER_GUIDE.md).

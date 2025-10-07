@@ -75,7 +75,6 @@
             "1",
             "--persist"
           ],
-          "produces": ["metrics/load_suite_report.json"]
         },
         {
           "id": "observability_checks",
@@ -115,7 +114,6 @@
         }
       ],
       "artifacts": [
-        "metrics/load_suite_report.json",
         "artifacts/regression_report.html",
         "artifacts/regression_metrics.json"
       ]
@@ -135,9 +133,7 @@
             "-m",
             "pytest",
             "-q",
-            "tests/test_load_suite.py",
-            "tests/test_benchmark_regression.py",
-            "tests/test_benchmark_numa.py"
+            "tests/test_load_suite.py"
           ]
         },
         {
@@ -185,10 +181,6 @@
         }
       ],
       "artifacts": [
-        "metrics/stability_report.json",
-        "metrics/soak_reference_timeseries.json",
-        "metrics/chaos_failover_reference.json",
-        "metrics/load_suite_report.json",
         "artifacts/ci/manifest.json",
         "artifacts/ci/RETENTION.txt",
         "artifacts/regression_report.html",

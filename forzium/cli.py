@@ -26,7 +26,7 @@ LOGGER = logging.getLogger("forzium.cli")
 
 def _run(cmd: list[str]) -> None:
     if os.getenv("FORZIUM_DRYRUN"):
-        print(" ".join(cmd))
+        LOGGER.info("DRY RUN: %s", " ".join(cmd))
     else:
         subprocess.run(cmd, check=True)  # nosec B603
 
@@ -107,8 +107,9 @@ def _start_server(loaded: LoadedApp, host: str, port: int, *, block: bool) -> No
     address = f"{host}:{port}"
     _run_coroutine(getattr(loaded.app, "startup", lambda: None)())
     loaded.server.serve(address)  # type: ignore[attr-defined]
-    print(
-        f"Forzium application '{loaded.module_name}:{loaded.app_name}' running on http://{address}"
+    LOGGER.info(
+        "Forzium application '%s:%s' running on http://%s",
+        loaded.module_name, loaded.app_name, address
     )
     if not block:
         return
@@ -251,7 +252,7 @@ def _cmd_bench(args: argparse.Namespace) -> None:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(formatted + "\n")
-    print(f"Benchmark results written to {output_path}", file=sys.stderr)
+    LOGGER.info("Benchmark results written to %s", output_path)
 
 
 def _load_plugins(

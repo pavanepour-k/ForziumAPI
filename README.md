@@ -98,8 +98,8 @@ Environment variables `FORZIUM_RATE_LIMIT`, `FORZIUM_RATE_LIMIT_WINDOW`, and `FO
 * **`forzium/`** – Framework core implementing routing, dependency injection, HTTP utilities, CLI tooling, and middleware.
 * **`interfaces/`** – gRPC definitions and shared schema compatibility helpers.
 * **`infrastructure/`** – Monitoring instrumentation, OTLP exporters, and deployment assets.
+* **`docs/`** – User-facing documentation and guides.
 * **`tests/`** – Comprehensive parity, integration, performance, and stress tests.
-* **`examples/`** – Reference applications illustrating recommended patterns.
 
 ---
 
@@ -118,7 +118,16 @@ Environment variables `FORZIUM_RATE_LIMIT`, `FORZIUM_RATE_LIMIT_WINDOW`, and `FO
 
 ## Getting Started Quickly
 
-1. Install dependencies: `pip install -r requirements.txt` (includes `forzium` + Rust engine build tooling).
-2. Review the example app in `examples/todo_api/` and run `python examples/todo_api/main.py`.
-3. Explore observability via the integrated Prometheus and OpenTelemetry exporters found in `infrastructure/monitoring`.
-4. Use `forzium --help` to discover CLI commands (`run`, `new`, `bench`). The benchmark command prints metrics to stdout and saves a prettified JSON report to `bench-results.json` (configurable via `--output`).
+1. Install dependencies: `pip install -r requirements.txt`
+2. Start the server: `python run_server.py`
+3. Test the API: `curl http://localhost:8000/health`
+
+For detailed usage instructions, see [User Guide](docs/USER_GUIDE.md).
+
+## Documentation
+
+* **[User Guide](docs/USER_GUIDE.md)** - Complete usage guide and examples
+* **[Architecture](docs/architecture.md)** - System architecture overview
+* **[Performance Baseline](docs/performance_baseline.md)** - Performance benchmarks
+* **[Release Notes](docs/release_notes.md)** - Version history and changes
+* **[Enterprise Guide](docs/enterprise_adoption_note.md)** - Enterprise deployment guide

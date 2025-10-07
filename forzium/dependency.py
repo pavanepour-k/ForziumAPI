@@ -1,4 +1,3 @@
-# flake8: noqa
 """Minimal HTTP primitives with header and cookie support."""
 
 from __future__ import annotations
@@ -60,7 +59,8 @@ class Request:
         parts = urlsplit(url)
         parsed_items = parse_qs(parts.query).items()
         self.query_params = {
-            k: (v[0] if len(v) == 1 else v) for k, v in parsed_items  # noqa: E501
+            k: (v[0] if len(v) == 1 else v) 
+            for k, v in parsed_items
         }
         self._cookies: dict[str, str] | None = None
         self._form_data: dict[str, Any] | None = None
@@ -91,8 +91,10 @@ class Request:
         ctype = self.headers.get("content-type", "")
         if ctype.startswith("multipart/form-data") or data.startswith(b"--"):
             boundary = (
-                ctype.split("boundary=")[-1] if "boundary=" in ctype else ""
-            )  # noqa: E501
+                ctype.split("boundary=")[-1] 
+                if "boundary=" in ctype 
+                else ""
+            )
             if not boundary:
                 line = data.split(b"\r\n", 1)[0]
                 if line.startswith(b"--"):

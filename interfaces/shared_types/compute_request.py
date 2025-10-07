@@ -28,5 +28,5 @@ class ComputeRequestModel(BaseModel):
             if any(len(row) != first_len for row in data):
                 raise ValueError(
                     "Data must be a non-empty rectangular matrix"
-                )  # noqa: E501
+                )
         return ComputeRequest(**values).dict()

@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+# Re-export from the configuration module to maintain backward compatibility
+from .configuration import (
+    ALLOWED_ENVS,
+    Settings,
+    load_settings,
+    validate_settings,
+)
 
-@dataclass
-class Settings:
-    """Configuration derived from environment variables."""
-
-    environment: str = "development"
-    debug: bool = False
-
-
-def load_settings() -> Settings:
-    """Load settings from the current environment."""
-    return Settings(
-        environment=os.getenv("FORZIUM_ENV", "development"),
-        debug=os.getenv("FORZIUM_DEBUG", "0") == "1",
-    )
+__all__ = ["Settings", "load_settings", "validate_settings", "ALLOWED_ENVS"]

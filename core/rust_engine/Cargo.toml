@@ -4,7 +4,7 @@ version = "0.1.4"
 edition = "2024"
 build = "build.rs"
 license = "MIT"
-rust-version = "1.89"
+rust-version = "1.90"
 
 [lib]
 name = "forzium_engine"

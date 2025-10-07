@@ -1,4 +1,4 @@
-# Performance Baseline (TODO-0008)
+# Performance Baseline
 
 ## Scenario
 
@@ -30,8 +30,6 @@ Each run records:
 Refer to [`metrics/performance_baseline.json`](../metrics/performance_baseline.json) for per-run details.
 
 ## δ Policy
-
-The regression gating policy is defined in [`gating.yaml`](../gating.yaml):
 
 - Throughput must not fall more than **5%** below the recorded baseline mean.
 - P95 latency must not exceed the baseline by more than **10%**.

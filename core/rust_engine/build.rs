@@ -16,11 +16,13 @@ fn main() {
         }
 
         // PyO3 may not report a library name when building with the stable ABI.
-        // Fallback to the canonical CPython shared library on Linux.
+        // Fallback to the canonical CPython shared library using detected version.
         let lib_name = cfg
             .lib_name
             .clone()
-            .unwrap_or_else(|| "python3.12".to_string());
+            .unwrap_or_else(|| {
+                format!("python{}.{}", cfg.version.major, cfg.version.minor)
+            });
         println!("cargo:rustc-link-lib={}", lib_name);
     }
 }

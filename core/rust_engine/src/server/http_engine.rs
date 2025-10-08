@@ -381,12 +381,20 @@ fn json_response(status: u16, body: serde_json::Value) -> Response<Full<Bytes>> 
         .status(status)
         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
         .body(Full::from(encoded))
-        .unwrap_or_else(|_| {
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to build JSON response: {e}");
             Response::builder()
                 .status(500)
                 .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
                 .body(Full::from(FALLBACK.to_vec()))
-                .expect("fallback response")
+                .unwrap_or_else(|fallback_err| {
+                    eprintln!("Failed to build fallback response: {fallback_err}");
+                    // Last resort: return empty response
+                    Response::builder()
+                        .status(500)
+                        .body(Full::from(Vec::new()))
+                        .unwrap()
+                })
         })
 }
 
@@ -452,7 +460,21 @@ async fn call_handler(
                     builder =
                         builder.header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
                 }
-                builder.body(Full::from(body_bytes)).unwrap()
+                builder.body(Full::from(body_bytes)).unwrap_or_else(|e| {
+                    eprintln!("Failed to build response body: {e}");
+                    Response::builder()
+                        .status(500)
+                        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                        .body(Full::from(FALLBACK.to_vec()))
+                        .unwrap_or_else(|fallback_err| {
+                            eprintln!("Failed to build fallback response: {fallback_err}");
+                            // Last resort: return empty response
+                            Response::builder()
+                                .status(500)
+                                .body(Full::from(Vec::new()))
+                                .unwrap()
+                        })
+                })
             }
             Err(e) => {
                 eprintln!("handler error: {e}");

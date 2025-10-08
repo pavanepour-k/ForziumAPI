@@ -149,6 +149,11 @@ class StreamingResponse(Response):
 
         for chunk in self._content:
             yield chunk
+    
+    @property
+    def body_iterator(self) -> Iterable[bytes]:
+        """Alias for body_iter() for backward compatibility."""
+        return self.body_iter()
 
     def serialize(self) -> tuple[int, bytes, dict[str, str]]:
         """Serialization is unsupported for streaming responses."""

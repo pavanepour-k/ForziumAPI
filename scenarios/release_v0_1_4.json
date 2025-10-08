@@ -1,9 +1,0 @@
-{
-  "version": "v0.1.4",
-  "scenarios": [
-    {
-      "name": "smoke",
-      "description": "Baseline release verification for v0.1.4"
-    }
-  ]
-}

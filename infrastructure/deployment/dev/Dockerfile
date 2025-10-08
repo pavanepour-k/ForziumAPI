@@ -3,7 +3,7 @@
 ##############################################
 # Builder image: compiles the Rust extension #
 ##############################################
-FROM rust:1.77-slim-bullseye AS builder
+FROM rust:1.90-slim-bullseye AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1

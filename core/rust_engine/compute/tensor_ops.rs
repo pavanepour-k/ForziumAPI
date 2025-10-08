@@ -92,6 +92,11 @@ pub fn simd_matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Forz
             let mut out_row = vec![0.0; cols_b];
             #[cfg(target_arch = "x86_64")]
             unsafe {
+                // SAFETY: We ensure row_a has at least k elements and bt_row has at least k elements
+                // before dereferencing pointers. The loop bound `k + 2 <= cols_a` guarantees we don't
+                // exceed bounds when loading 2 elements at a time. The `validate_matrix` function
+                // ensures all vectors have the correct length, and `transpose` preserves the total
+                // element count. The `_mm_loadu_pd` intrinsic can handle unaligned memory safely.
                 for (bt_row, out_cell) in bt.iter().zip(out_row.iter_mut()) {
                     let mut k = 0;
                     let mut vsum = _mm_set1_pd(0.0);
@@ -148,6 +153,10 @@ pub fn simd_elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f6
     let mut out = vec![vec![0.0; cols]; rows];
     #[cfg(target_arch = "x86_64")]
     unsafe {
+        // SAFETY: We ensure a[r] and b[r] have at least c elements before dereferencing pointers.
+        // The loop bound `c + 2 <= cols` guarantees we don't exceed bounds when loading 2 elements
+        // at a time. The `validate_same_shape` function ensures all vectors have the same length.
+        // The `_mm_loadu_pd` and `_mm_storeu_pd` intrinsics can handle unaligned memory safely.
         for r in 0..rows {
             let mut c = 0;
             while c + 2 <= cols {
@@ -206,6 +215,10 @@ pub fn conv2d(input: &[Vec<f64>], kernel: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, 
             let mut sum = 0.0;
             #[cfg(target_arch = "x86_64")]
             unsafe {
+                // SAFETY: We ensure input[r + kr] has at least c + kc elements and kernel[kr] has at least
+                // kc elements before dereferencing pointers. The loop bounds `r + kr < rows` and
+                // `c + kc < cols` are guaranteed by the outer loop bounds and the convolution output
+                // size calculation. The `_mm_loadu_pd` intrinsic can handle unaligned memory safely.
                 for kr in 0..krows {
                     let mut kc = 0;
                     let mut vsum = _mm_set1_pd(0.0);

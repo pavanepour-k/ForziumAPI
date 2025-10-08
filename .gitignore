@@ -17,6 +17,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 target/
+*cache*
+*.lock
+*__pycache__*
 
 # PEP 582
 __pypackages__/

@@ -10,12 +10,30 @@ from __future__ import annotations
 
 import os
 import time
+import warnings
 from typing import List
 
-from forzium_engine import conv2d as _rust_conv2d
-from forzium_engine import elementwise_add as _rust_add
-from forzium_engine import elementwise_mul as _rust_mul
-from forzium_engine import simd_matmul as _rust_matmul
+try:
+    import forzium_engine
+    _rust_conv2d = forzium_engine.conv2d
+    _rust_add = forzium_engine.elementwise_add
+    _rust_mul = forzium_engine.elementwise_mul
+    _rust_matmul = forzium_engine.simd_matmul
+    _RUST_FUNCTIONS_AVAILABLE = True
+except (ImportError, AttributeError):
+    _rust_conv2d = None
+    _rust_add = None
+    _rust_mul = None
+    _rust_matmul = None
+    _RUST_FUNCTIONS_AVAILABLE = False
+    # Emit warning when Rust functions are not available
+    warnings.warn(
+        "Rust compute functions not available in GPU service. "
+        "Using Python fallbacks with significant performance impact. "
+        "Install Rust extension for optimal performance.",
+        UserWarning,
+        stacklevel=2
+    )
 
 try:  # pragma: no cover - optional dependency
     import cupy as cp  # type: ignore
@@ -28,6 +46,22 @@ except Exception:  # pragma: no cover
 
 GPU_DEVICE = int(os.getenv("FORZIUM_GPU_DEVICE", "0"))
 USE_GPU = bool(cp) and os.getenv("FORZIUM_USE_GPU") == "1"
+
+
+def _emit_gpu_performance_warning(
+    operation: str, performance_impact: str = "10-100x slower"
+) -> None:
+    """Emit a performance warning for GPU service Python fallback operations."""
+    if not os.getenv("FORZIUM_SUPPRESS_FALLBACK_WARNINGS"):
+        warnings.warn(
+            f"Using Python fallback for {operation} in GPU service. "
+            f"Performance impact: {performance_impact}. "
+            f"Install Rust extension for optimal performance.",
+            UserWarning,
+            stacklevel=3
+        )
+
+
 if USE_GPU and cp and hasattr(cp, "cuda"):
     try:  # pragma: no cover - optional dependency
         cp.cuda.Device(GPU_DEVICE).use()
@@ -79,7 +113,11 @@ def elementwise_add(a: List[List[float]], b: List[List[float]]) -> List[List[flo
             _ADD_KERNEL(grid, (256,), (a_cp, b_cp, out, n))
             result = cp.asnumpy(out)
         return result.tolist()
-    return _rust_add(a, b)
+    if _rust_add:
+        return _rust_add(a, b)
+    # Python fallback
+    _emit_gpu_performance_warning("elementwise addition", "5-20x slower")
+    return [[a[i][j] + b[i][j] for j in range(len(a[0]))] for i in range(len(a))]
 
 
 def elementwise_mul(a: List[List[float]], b: List[List[float]]) -> List[List[float]]:
@@ -96,7 +134,11 @@ def elementwise_mul(a: List[List[float]], b: List[List[float]]) -> List[List[flo
             _MUL_KERNEL(grid, (256,), (a_cp, b_cp, out, n))
             result = cp.asnumpy(out)
         return result.tolist()
-    return _rust_mul(a, b)
+    if _rust_mul:
+        return _rust_mul(a, b)
+    # Python fallback
+    _emit_gpu_performance_warning("elementwise multiplication", "5-20x slower")
+    return [[a[i][j] * b[i][j] for j in range(len(a[0]))] for i in range(len(a))]
 
 
 def matmul(a: List[List[float]], b: List[List[float]]) -> List[List[float]]:
@@ -107,7 +149,19 @@ def matmul(a: List[List[float]], b: List[List[float]]) -> List[List[float]]:
         b_cp = cp.array(b)
         result = cp.asnumpy(a_cp @ b_cp)
         return result.tolist()
-    return _rust_matmul(a, b)
+    if _rust_matmul:
+        return _rust_matmul(a, b)
+    # Python fallback
+    _emit_gpu_performance_warning("matrix multiplication", "10-100x slower")
+    if not a or not b or len(a[0]) != len(b):
+        raise ValueError("Incompatible matrices")
+    cols = len(b[0])
+    result = [[0.0 for _ in range(cols)] for _ in range(len(a))]
+    for i, row in enumerate(a):
+        for k, val in enumerate(row):
+            for j in range(cols):
+                result[i][j] += val * b[k][j]
+    return result
 
 
 def conv2d(input_: List[List[float]], kernel: List[List[float]]) -> List[List[float]]:
@@ -118,7 +172,22 @@ def conv2d(input_: List[List[float]], kernel: List[List[float]]) -> List[List[fl
         ker = cp.array(kernel)
         res = cpsignal.convolve2d(inp, ker, mode="valid")
         return cp.asnumpy(res).tolist()
-    return _rust_conv2d(input_, kernel)
+    if _rust_conv2d:
+        return _rust_conv2d(input_, kernel)
+    # Python fallback
+    _emit_gpu_performance_warning("2D convolution", "50-500x slower")
+    input_h, input_w = len(input_), len(input_[0])
+    kernel_h, kernel_w = len(kernel), len(kernel[0])
+    output_h = input_h - kernel_h + 1
+    output_w = input_w - kernel_w + 1
+    
+    result = [[0.0 for _ in range(output_w)] for _ in range(output_h)]
+    for i in range(output_h):
+        for j in range(output_w):
+            for ki in range(kernel_h):
+                for kj in range(kernel_w):
+                    result[i][j] += input_[i + ki][j + kj] * kernel[ki][kj]
+    return result
 
 
 def benchmark_elementwise_mul(
@@ -128,7 +197,10 @@ def benchmark_elementwise_mul(
 
     start = time.perf_counter()
     for _ in range(repeat):
-        _rust_mul(a, b)
+        if _rust_mul:
+            _rust_mul(a, b)
+        else:
+            elementwise_mul(a, b)
     cpu = (time.perf_counter() - start) * 1e3 / repeat
     if USE_GPU and cp:
         start = time.perf_counter()
@@ -147,7 +219,10 @@ def benchmark_matmul(
 
     start = time.perf_counter()
     for _ in range(repeat):
-        _rust_matmul(a, b)
+        if _rust_matmul:
+            _rust_matmul(a, b)
+        else:
+            matmul(a, b)
     cpu = (time.perf_counter() - start) * 1e3 / repeat
     if USE_GPU and cp:
         start = time.perf_counter()
@@ -166,7 +241,10 @@ def benchmark_conv2d(
 
     start = time.perf_counter()
     for _ in range(repeat):
-        _rust_conv2d(a, k)
+        if _rust_conv2d:
+            _rust_conv2d(a, k)
+        else:
+            conv2d(a, k)
     cpu = (time.perf_counter() - start) * 1e3 / repeat
     if USE_GPU and cp and cpsignal:
         start = time.perf_counter()

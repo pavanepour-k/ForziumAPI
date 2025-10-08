@@ -25,7 +25,6 @@ use crate::error::catch_unwind_py;
 enum Segment {
     Static(String),
     Param {
-        #[allow(dead_code)]
         name: String,
         ty: ParamType,
     },

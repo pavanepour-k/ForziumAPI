@@ -4,7 +4,6 @@ source =
     forzium
     infrastructure
     interfaces
-    plugins
 omit =
     tests
 

@@ -175,7 +175,10 @@ impl RayonMetrics {
         let start = self
             .observation_start
             .lock()
-            .expect("observation_start poisoned");
+            .unwrap_or_else(|poisoned| {
+                // Recover from poisoned mutex by clearing poison state
+                poisoned.into_inner()
+            });
         start.elapsed()
     }
 
@@ -190,7 +193,10 @@ impl RayonMetrics {
         let mut start = self
             .observation_start
             .lock()
-            .expect("observation_start poisoned");
+            .unwrap_or_else(|poisoned| {
+                // Recover from poisoned mutex by clearing poison state
+                poisoned.into_inner()
+            });
         *start = Instant::now();
     }
 }

@@ -1,0 +1,46 @@
+name: CI Test
+
+on:
+  push:
+    branches: [main, dev, test/feature]
+  pull_request:
+    branches: [main, dev, test/feature]
+
+jobs:
+  rust_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.90.0
+          components: rustfmt, clippy
+      - name: Build and test Rust project
+        run: |
+          cd core/rust_engine
+          cargo build --verbose
+          cargo test --verbose
+          cargo fmt -- --check
+          cargo clippy --all-targets -- -D warnings
+
+  python_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      - name: Install dependencies
+        run: |
+          poetry install
+      - name: Run Python tests
+        run: |
+          poetry run pytest tests/ -v --cov=forzium --cov=core --cov-report=xml

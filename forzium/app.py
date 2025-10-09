@@ -106,6 +106,8 @@ def _get_type_adapter(tp: Any) -> Any | None:
     try:
         adapter = TypeAdapter(tp)  # type: ignore[misc]
     except Exception:  # pragma: no cover - passthrough to manual coercion
+        # Broad exception handling for Pydantic TypeAdapter creation
+        # to provide fallback to manual type coercion when adapter fails
         _TYPE_ADAPTER_CACHE[tp] = None
         return None
     _TYPE_ADAPTER_CACHE[tp] = adapter
@@ -349,6 +351,8 @@ def _make_dependency_parser(name: str, annotation: Any) -> Callable[[Request], A
                     return annotation.model_validate(payload)  # type: ignore[attr-defined]
                 return annotation.parse_obj(payload)  # type: ignore[attr-defined]
             except Exception as exc:  # noqa: BLE001
+                # Broad exception handling for Pydantic validation
+                # to properly handle all validation error types from the library
                 if (
                     PydanticValidationError is not None
                     and isinstance(exc, PydanticValidationError)
@@ -1044,6 +1048,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
             try:
                 type_hints = get_type_hints(func, include_extras=True)
             except Exception:  # noqa: BLE001 - fallback for unresolved hints
+                # Broad exception handling for type hints resolution
+                # to provide fallback when hints cannot be resolved
                 type_hints = {}
             for name, param in sig.parameters.items():
                 annotation = type_hints.get(name, param.annotation)
@@ -1550,6 +1556,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                             "span_id": getattr(span_context, "span_id", None),
                         }
                     except Exception:  # pragma: no cover - best effort telemetry capture
+                        # Broad exception handling for telemetry capture
+                        # to ensure telemetry failures don't break the application
                         pass
                 finalizer_state["context"] = context
                 notify_telemetry_finalizers(context)
@@ -1684,6 +1692,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                             dependencies, overrides, req_obj
                         )
                 except Exception as exc:
+                    # Broad exception handling for dependency resolution
+                    # to properly route all dependency errors to appropriate handlers
                     handler = self._lookup_handler(exc)
                     if handler:
                         custom = handler(req_obj, exc)
@@ -1747,6 +1757,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                                         raw, anno, ["query", name]
                                     )
                                 except Exception as exc:  # noqa: BLE001
+                                    # Broad exception handling for query parameter validation
+                                    # to properly handle all Pydantic validation error types
                                     if (
                                         PydanticValidationError is not None
                                         and isinstance(exc, PydanticValidationError)
@@ -1788,6 +1800,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                                 payload, anno, ["body"]
                             )
                         except Exception as exc:  # noqa: BLE001
+                            # Broad exception handling for request body validation
+                            # to properly handle all Pydantic validation error types
                             if (
                                 PydanticValidationError is not None
                                 and isinstance(exc, PydanticValidationError)
@@ -1832,6 +1846,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                                 Coroutine[Any, Any, Any], result
                             )
                 except Exception as exc:
+                    # Broad exception handling for handler execution
+                    # to properly route all handler errors to appropriate handlers
                     handler = self._lookup_handler(exc)
                     if handler:
                         custom = handler(req_obj, exc)
@@ -1906,6 +1922,8 @@ SwaggerUIBundle({url: \"/openapi.json\", dom_id: \"#swagger-ui\"});
                     except ValueError as exc:
                         return finalize_json(400, {"detail": str(exc)}, {})
                     except Exception:
+                        # Broad exception handling for response body iteration
+                        # to ensure server errors are properly handled
                         return finalize_json(
                             500, {"detail": "Internal Server Error"}, {}
                         )

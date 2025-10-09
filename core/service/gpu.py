@@ -37,11 +37,11 @@ except (ImportError, AttributeError):
 
 try:  # pragma: no cover - optional dependency
     import cupy as cp  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     cp = None  # type: ignore
 try:  # pragma: no cover - optional dependency
     import cupyx.scipy.signal as cpsignal  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     cpsignal = None  # type: ignore
 
 GPU_DEVICE = int(os.getenv("FORZIUM_GPU_DEVICE", "0"))
@@ -65,7 +65,7 @@ def _emit_gpu_performance_warning(
 if USE_GPU and cp and hasattr(cp, "cuda"):
     try:  # pragma: no cover - optional dependency
         cp.cuda.Device(GPU_DEVICE).use()
-    except Exception:  # pragma: no cover
+    except (RuntimeError, AttributeError):  # pragma: no cover
         USE_GPU = False
 
 if USE_GPU and cp and hasattr(cp, "RawKernel"):
@@ -180,7 +180,7 @@ def conv2d(input_: List[List[float]], kernel: List[List[float]]) -> List[List[fl
     kernel_h, kernel_w = len(kernel), len(kernel[0])
     output_h = input_h - kernel_h + 1
     output_w = input_w - kernel_w + 1
-    
+
     result = [[0.0 for _ in range(output_w)] for _ in range(output_h)]
     for i in range(output_h):
         for j in range(output_w):
@@ -271,7 +271,7 @@ def benchmark_tensor_ops(
 def set_device(device_id: int) -> None:
     """Select active GPU device."""
 
-    global GPU_DEVICE
+    global GPU_DEVICE  # noqa: PLW0603 - Global state required for GPU device management
     GPU_DEVICE = device_id
     if cp and USE_GPU:
         cp.cuda.Device(device_id).use()

@@ -9,6 +9,8 @@ from interfaces.shared_types import CancellationToken
 try:  # pragma: no cover - optional extension
     from forzium_engine import PoolAllocator  # type: ignore
 except Exception:  # pragma: no cover
+    # Broad exception handling for optional dependency import
+    # to provide fallback implementation when Rust extension unavailable
 
     class PoolAllocator:  # type: ignore
         """Fallback variable-size pool capped by total capacity."""
@@ -110,6 +112,8 @@ def run_computation(
     except ValueError:
         raise
     except Exception as exc:  # pragma: no cover - simple mapping
+        # Catch-all for unexpected errors in compute operations
+        # Convert to RuntimeError for consistent error handling
         raise RuntimeError(f"{operation} failed: {exc}") from exc
 
     exec_ms = (time.time() - start) * 1000
@@ -156,6 +160,8 @@ def stream_computation(
     except ValueError:
         raise
     except Exception as exc:
+        # Catch-all for unexpected errors in streaming compute operations
+        # Convert to RuntimeError for consistent error handling
         raise RuntimeError(f"{operation} failed: {exc}") from exc
 
     for row in result:

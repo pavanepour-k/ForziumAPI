@@ -275,6 +275,8 @@ class BackgroundTask:
             else:
                 await asyncio.to_thread(self.func, *self.args, **self.kwargs)
         except Exception:
+            # Broad exception handling for background tasks
+            # to ensure task failures are logged but don't crash the main thread
             logging.getLogger("forzium").error(
                 "Background task %s raised an exception",
                 getattr(self.func, "__qualname__", repr(self.func)),
@@ -309,6 +311,8 @@ class BackgroundTasks:
             try:
                 await task()
             except Exception:
+                # Broad exception handling for background task execution
+                # to ensure individual task failures don't stop other tasks
                 logging.getLogger("forzium").error(
                     "Background task %r raised an exception",
                     task,
@@ -367,6 +371,8 @@ class Response:
             try:
                 await self.background()
             except Exception:
+                # Broad exception handling for background execution
+                # to ensure background failures don't affect response delivery
                 logging.getLogger("forzium").error(
                     "Background execution raised an exception",
                     exc_info=True,

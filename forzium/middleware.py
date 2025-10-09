@@ -164,6 +164,8 @@ class SessionMiddleware(BaseHTTPMiddleware):
             decoded = base64.urlsafe_b64decode(raw.encode()).decode()
             self.data = json.loads(decoded)
         except Exception:  # pragma: no cover - invalid cookie
+            # Broad exception handling for cookie parsing
+            # to gracefully handle malformed cookies without breaking the request
             self.data = {}
 
     def before_request(
@@ -356,6 +358,8 @@ class RequestLoggerMiddleware:
             if inspect.isawaitable(response):
                 response = await response
         except Exception as exc:
+            # Broad exception handling for request processing in middleware
+            # to ensure all errors are logged before re-raising
             duration_ms = (time.perf_counter() - start) * 1000
             self._log_failure(request, duration_ms, exc)
             raise
@@ -370,6 +374,8 @@ class RequestLoggerMiddleware:
         try:
             context = span.get_span_context()  # type: ignore[attr-defined]
         except Exception:  # pragma: no cover - tolerate missing APIs
+            # Broad exception handling for telemetry span context extraction
+            # to gracefully handle missing telemetry APIs
             return {}
         trace_id = getattr(context, "trace_id", 0)
         span_id = getattr(context, "span_id", 0)

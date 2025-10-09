@@ -83,6 +83,8 @@ class RedisCacheBackend:
         try:
             return bool(self.client.ping())
         except Exception:  # pragma: no cover - network failures
+            # Broad exception handling acceptable for security/network code
+            # to prevent information leakage and ensure graceful degradation
             return False
 
     def get(self) -> float:
@@ -110,6 +112,8 @@ def set_cache_backend(backend: CacheVersionBackend) -> None:
         try:
             healthy = bool(getattr(backend, "healthy")())
         except Exception:  # pragma: no cover - defensive
+            # Broad exception handling for security-critical cache backend validation
+            # to prevent information leakage and ensure system stability
             healthy = False
     record_metric("cache_backend_health", 1.0 if healthy else 0.0)
     if healthy:
@@ -453,6 +457,8 @@ def decode_jwt(token: str, secret: str) -> Dict[str, Any] | None:
         payload_json = base64.urlsafe_b64decode(payload_b64 + "==")
         return json.loads(payload_json)
     except Exception:
+        # Broad exception handling for JWT decoding to prevent information leakage
+        # and ensure invalid tokens are safely rejected without exposing details
         return None
 
 
@@ -555,6 +561,8 @@ def verify_password(password: str, hashed: str) -> bool:
         check = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000)
         return hmac.compare_digest(digest, check)
     except Exception:
+        # Broad exception handling for password verification to prevent timing attacks
+        # and ensure invalid hashes are safely rejected without exposing details
         return False
 
 

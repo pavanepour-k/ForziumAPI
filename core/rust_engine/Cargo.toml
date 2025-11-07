@@ -11,7 +11,7 @@ name = "forzium_engine"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = { version = "0.25.1", features = ["auto-initialize"] }
+pyo3 = { version = "0.27.1", features = ["auto-initialize"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["server", "tokio", "http1", "server-auto", "server-graceful"] }
@@ -22,7 +22,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
-pyo3-build-config = "0.25.1"
+pyo3-build-config = "0.27.1"
 
 [features]
 extension-module = ["pyo3/extension-module"]

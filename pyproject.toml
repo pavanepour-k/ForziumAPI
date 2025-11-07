@@ -46,10 +46,10 @@ mypy = "^1.17.1"
 mutmut = "^3.3.1"
 pip-audit = "^2.9.0"
 pip-licenses = "^5.0.0"
-protobuf = "^4.25.0"
+protobuf = "^6.33.0"
 pytest = "^8.4.2"
 pytest-benchmark = "^5.1.0"
-pytest-cov = "^6.3.0"
+pytest-cov = "^7.0.0"
 ruff = "^0.14.4"
 safety = "^3.6.1"
 
@@ -58,3 +58,31 @@ paths_to_mutate = ["forzium"]
 
 [tool.isort]
 profile = "black"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+select = ["E", "F", "I", "N", "UP", "ANN", "B", "COM", "C90", "T20", "PT", "RET", "SIM"]
+exclude = [
+    ".bzr",
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__",
+    ".tox",
+    ".eggs",
+    "*.egg",
+    "venv",
+    "env",
+    ".venv",
+    ".env"
+]
+
+[tool.ruff.lint]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["forzium", "core", "interfaces"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

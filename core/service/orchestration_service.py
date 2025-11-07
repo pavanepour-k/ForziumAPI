@@ -80,7 +80,22 @@ def run_computation(
     parameters: Dict[str, Any],
     token: CancellationToken | None = None,
 ) -> Dict[str, Any]:
-    """Execute a simple arithmetic operation on a matrix"""
+    """
+    Execute a computation operation on matrix data.
+    
+    Args:
+        data: 2D matrix of floating-point values
+        operation: Operation name (multiply, add, matmul)
+        parameters: Operation-specific parameters
+        token: Optional cancellation token for aborting long operations
+        
+    Returns:
+        Dictionary with result matrix and execution metrics
+        
+    Raises:
+        ValueError: If operation is unsupported or parameters invalid
+        RuntimeError: If computation fails or is canceled
+    """
     start = time.time()
 
     if token and token.cancelled():
@@ -127,7 +142,25 @@ def stream_computation(
     parameters: Dict[str, Any],
     token: CancellationToken | None = None,
 ) -> Iterable[List[float]]:
-    """Yield computation results row by row"""
+    """
+    Yield computation results row by row.
+    
+    This function provides a streaming interface to run_computation,
+    yielding one row at a time to reduce memory overhead for large matrices.
+    
+    Args:
+        data: 2D matrix of floating-point values
+        operation: Operation name (multiply, add, matmul)
+        parameters: Operation-specific parameters
+        token: Optional cancellation token for aborting long operations
+        
+    Yields:
+        Each row of the result matrix as a list of float values
+        
+    Raises:
+        ValueError: If operation is unsupported or parameters invalid
+        RuntimeError: If computation fails or is canceled during iteration
+    """
 
     if token and token.cancelled():
         raise RuntimeError("operation cancelled")
@@ -167,7 +200,24 @@ def stream_computation(
 def zero_copy_multiply(
     data: List[List[float]], factor: float, pool: PoolAllocator
 ) -> memoryview:
-    """Multiply *data* by *factor* into a pooled buffer."""
+    """
+    Multiply data by factor into a pooled memory buffer without extra copies.
+    
+    This function performs a matrix multiplication using pre-allocated memory
+    from a memory pool, minimizing allocations and copies between operations.
+    
+    Args:
+        data: 2D matrix of floating-point values
+        factor: Multiplication factor to apply to each value
+        pool: Memory pool allocator to use for result storage
+        
+    Returns:
+        Memory view referencing the result data in the pool buffer
+        
+    Raises:
+        RuntimeError: If memory pool is unavailable
+        MemoryError: If pool cannot accommodate the result data
+    """
 
     if pool is None:  # pragma: no cover - defensive
         raise RuntimeError("memory pool unavailable")
@@ -179,7 +229,20 @@ def zero_copy_multiply(
 
 
 def profile_pool(pool: PoolAllocator, workers: int, size: int) -> int:
-    """Stress *pool* with concurrent allocations."""
+    """
+    Stress test a memory pool with concurrent allocations.
+    
+    Launches multiple worker threads that simultaneously allocate and deallocate
+    memory from the pool to identify concurrency issues and measure peak memory usage.
+    
+    Args:
+        pool: Memory pool allocator to test
+        workers: Number of concurrent worker threads
+        size: Size in bytes for each allocation
+        
+    Returns:
+        Peak memory usage in bytes observed during the test
+    """
 
     import threading
 

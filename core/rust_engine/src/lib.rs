@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
+use pyo3_numpy as numpy;
 
 pub mod async_compute;
 #[path = "../bindings/mod.rs"]
@@ -10,6 +11,7 @@ pub mod error;
 pub mod error_bridge;
 pub mod gil_utils;
 pub mod memory;
+pub mod numpy_ops;
 pub mod server;
 pub mod validation;
 
@@ -62,18 +64,36 @@ fn transpose(matrix: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
 }
 
 #[pyfunction]
-fn elementwise_add(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
-    tensor_ops::elementwise_add(&a, &b).map_err(Into::into)
+fn elementwise_add(py: Python<'_>, a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    let a_clone = a.clone();
+    let b_clone = b.clone();
+
+    // Release GIL during computation
+    py.allow_threads(move || tensor_ops::elementwise_add(&a_clone, &b_clone).map_err(Into::into))
 }
 
 #[pyfunction]
-fn simd_elementwise_add(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
-    tensor_ops::simd_elementwise_add(&a, &b).map_err(Into::into)
+fn simd_elementwise_add(
+    py: Python<'_>,
+    a: Vec<Vec<f64>>,
+    b: Vec<Vec<f64>>,
+) -> PyResult<Vec<Vec<f64>>> {
+    let a_clone = a.clone();
+    let b_clone = b.clone();
+
+    // Release GIL during computation
+    py.allow_threads(move || {
+        tensor_ops::simd_elementwise_add(&a_clone, &b_clone).map_err(Into::into)
+    })
 }
 
 #[pyfunction]
-fn elementwise_mul(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
-    tensor_ops::hadamard(&a, &b).map_err(Into::into)
+fn elementwise_mul(py: Python<'_>, a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    let a_clone = a.clone();
+    let b_clone = b.clone();
+
+    // Release GIL during computation
+    py.allow_threads(move || tensor_ops::hadamard(&a_clone, &b_clone).map_err(Into::into))
 }
 
 #[pyfunction]
@@ -86,8 +106,12 @@ fn conv2d(py: Python<'_>, a: Vec<Vec<f64>>, k: Vec<Vec<f64>>) -> PyResult<Vec<Ve
 }
 
 #[pyfunction]
-fn max_pool2d(a: Vec<Vec<f64>>, size: usize) -> PyResult<Vec<Vec<f64>>> {
-    tensor_ops::max_pool2d(&a, size).map_err(Into::into)
+fn max_pool2d(py: Python<'_>, a: Vec<Vec<f64>>, size: usize) -> PyResult<Vec<Vec<f64>>> {
+    let a_clone = a.clone();
+    let size_clone = size;
+
+    // Release GIL during computation
+    py.allow_threads(move || tensor_ops::max_pool2d(&a_clone, size_clone).map_err(Into::into))
 }
 
 #[pyfunction]
@@ -283,6 +307,7 @@ fn forzium_engine(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     // Register submodules
     bindings::api_bindings::register(m)?;
     error_bridge::register(py, m)?;
+    numpy_ops::register(py, m)?;
     Ok(())
 }
 

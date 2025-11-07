@@ -1,19 +1,33 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
+pub mod async_compute;
 #[path = "../bindings/mod.rs"]
 mod bindings;
 #[path = "../compute/mod.rs"]
 pub mod compute;
 pub mod error;
+pub mod error_bridge;
+pub mod gil_utils;
 pub mod memory;
 pub mod server;
 pub mod validation;
 
+use crate::async_compute::{create_async_compute, AsyncCompute, ComputeHandle};
 use crate::compute::{
-    data_transform, engine::ComputeEngine, ml_inference::PyLinearModel, rayon_metrics, tensor_ops,
+    data_transform,
+    engine::ComputeEngine,
+    ml_inference::PyLinearModel,
+    rayon_metrics, simd_ops, tensor_ops,
+    thread_pool::{
+        configure_global_thread_pool, initialize_optimal_thread_pools, run_in_compute_pool,
+        run_in_io_pool,
+    },
 };
 use crate::error::ForziumError;
+use crate::error_bridge::{
+    get_last_error, set_capture_stack_traces, set_verbose_errors, ErrorCategory,
+};
 use crate::memory::gc_interface::force_gc;
 use crate::server::http_engine::ForziumHttpServer;
 use crate::validation::compute_request::ComputeRequestSchema;
@@ -34,8 +48,12 @@ fn matmul(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
 }
 
 #[pyfunction]
-fn simd_matmul(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
-    tensor_ops::simd_matmul(&a, &b).map_err(Into::into)
+fn simd_matmul(py: Python<'_>, a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    let a_clone = a.clone();
+    let b_clone = b.clone();
+
+    // Release GIL during computation
+    py.allow_threads(move || tensor_ops::simd_matmul(&a_clone, &b_clone).map_err(Into::into))
 }
 
 #[pyfunction]
@@ -59,8 +77,12 @@ fn elementwise_mul(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>
 }
 
 #[pyfunction]
-fn conv2d(a: Vec<Vec<f64>>, k: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
-    tensor_ops::conv2d(&a, &k).map_err(Into::into)
+fn conv2d(py: Python<'_>, a: Vec<Vec<f64>>, k: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    let a_clone = a.clone();
+    let k_clone = k.clone();
+
+    // Release GIL during computation
+    py.allow_threads(move || tensor_ops::conv2d(&a_clone, &k_clone).map_err(Into::into))
 }
 
 #[pyfunction]
@@ -122,6 +144,99 @@ fn rayon_pool_metrics(py: Python<'_>, reset: Option<bool>) -> PyResult<PyObject>
     Ok(dict.into())
 }
 
+/// Matrix multiplication using the best available SIMD instruction set
+#[pyfunction]
+fn optimal_matmul(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    simd_ops::optimal_matmul(&a, &b).map_err(Into::into)
+}
+
+/// Element-wise matrix addition using the best available SIMD instruction set
+#[pyfunction]
+fn optimal_add(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    simd_ops::optimal_add(&a, &b).map_err(Into::into)
+}
+
+/// Returns the highest SIMD instruction set supported by the current CPU
+#[pyfunction]
+fn detect_simd_support() -> &'static str {
+    simd_ops::detect_simd_support()
+}
+
+/// Run benchmark comparing basic operations with SIMD-optimized versions
+#[pyfunction]
+fn benchmark_simd() -> PyResult<String> {
+    Ok(simd_ops::benchmark_simd_ops())
+}
+
+/// Initialize thread pools with optimal settings for the current hardware
+#[pyfunction]
+fn optimize_thread_pools() -> PyResult<()> {
+    initialize_optimal_thread_pools().map_err(|err| pyo3::exceptions::PyRuntimeError::new_err(err))
+}
+
+/// Configure the global rayon thread pool with custom settings
+#[pyfunction]
+fn configure_rayon_thread_pool(
+    thread_count: Option<usize>,
+    stack_size_mb: Option<usize>,
+    thread_lifetime_seconds: Option<u64>,
+    breadth_first: Option<bool>,
+) -> PyResult<()> {
+    let threads = thread_count.unwrap_or_else(num_cpus::get);
+    let stack = stack_size_mb.unwrap_or(2) * 1024 * 1024; // Convert MB to bytes
+    let lifetime = thread_lifetime_seconds.unwrap_or(30) * 1000; // Convert seconds to ms
+    let breadth = breadth_first.unwrap_or(false);
+
+    configure_global_thread_pool(threads, stack, lifetime, breadth)
+        .map_err(|err| pyo3::exceptions::PyRuntimeError::new_err(err))
+}
+
+/// Run a Python function in the optimized compute thread pool
+#[pyfunction]
+fn run_in_compute_threadpool(py: Python<'_>, func: &Bound<PyAny>) -> PyResult<PyObject> {
+    // Create a oneshot channel for the result
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    // Execute the function in the compute pool
+    py.allow_threads(move || {
+        run_in_compute_pool(|| {
+            let result = Python::with_gil(|py| func.call0(py));
+            tx.send(result).unwrap();
+        });
+    });
+
+    // Receive the result
+    match rx.recv() {
+        Ok(result) => result,
+        Err(_) => Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Thread pool execution failed",
+        )),
+    }
+}
+
+/// Run a Python function in the optimized IO thread pool
+#[pyfunction]
+fn run_in_io_threadpool(py: Python<'_>, func: &Bound<PyAny>) -> PyResult<PyObject> {
+    // Create a oneshot channel for the result
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    // Execute the function in the IO pool
+    py.allow_threads(move || {
+        run_in_io_pool(|| {
+            let result = Python::with_gil(|py| func.call0(py));
+            tx.send(result).unwrap();
+        });
+    });
+
+    // Receive the result
+    match rx.recv() {
+        Ok(result) => result,
+        Err(_) => Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Thread pool execution failed",
+        )),
+    }
+}
+
 #[pymodule]
 fn forzium_engine(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(multiply, m)?)?;
@@ -141,15 +256,38 @@ fn forzium_engine(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(echo_u64, m)?)?;
     m.add_function(wrap_pyfunction!(force_gc, m)?)?;
     m.add_function(wrap_pyfunction!(rayon_pool_metrics, m)?)?;
+    m.add_function(wrap_pyfunction!(optimal_matmul, m)?)?;
+    m.add_function(wrap_pyfunction!(optimal_add, m)?)?;
+    m.add_function(wrap_pyfunction!(detect_simd_support, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_simd, m)?)?;
+
+    // Thread pool optimization functions
+    m.add_function(wrap_pyfunction!(optimize_thread_pools, m)?)?;
+    m.add_function(wrap_pyfunction!(configure_rayon_thread_pool, m)?)?;
+    m.add_function(wrap_pyfunction!(run_in_compute_threadpool, m)?)?;
+    m.add_function(wrap_pyfunction!(run_in_io_threadpool, m)?)?;
     m.add_class::<PyLinearModel>()?;
     m.add_class::<ComputeEngine>()?;
     m.add_function(wrap_pyfunction!(trigger_panic, m)?)?;
     m.add_class::<ForziumHttpServer>()?;
     m.add_class::<ComputeRequestSchema>()?;
     m.add_class::<crate::memory::pool_allocator::PoolAllocator>()?;
+    m.add_class::<AsyncCompute>()?;
+    m.add_class::<ComputeHandle>()?;
+    m.add_function(wrap_pyfunction!(create_async_compute, m)?)?;
+    m.add_class::<ErrorCategory>()?;
+    m.add_function(wrap_pyfunction!(set_verbose_errors, m)?)?;
+    m.add_function(wrap_pyfunction!(set_capture_stack_traces, m)?)?;
+    m.add_function(wrap_pyfunction!(get_last_error, m)?)?;
+
+    // Register submodules
     bindings::api_bindings::register(m)?;
+    error_bridge::register(py, m)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod ffi_tests;
 
 #[cfg(test)]
 mod tests {

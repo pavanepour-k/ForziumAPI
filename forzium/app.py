@@ -580,21 +580,47 @@ class ForziumApp:
         self._asgi_middleware.append(middleware)
 
     def add_security_scheme(self, name: str, scheme: dict[str, Any]) -> None:
-        """Register security *scheme* under *name*."""
+        """
+        Register security scheme under the specified name.
+        
+        Adds an OpenAPI security scheme definition to be included in the API documentation.
+        
+        Args:
+            name: Name of the security scheme (e.g., "bearerAuth", "oauth2")
+            scheme: OpenAPI security scheme object definition
+        """
 
         self.security_schemes[name] = scheme
 
     def customize_openapi(
         self, func: Callable[[dict[str, Any]], dict[str, Any]]
     ) -> None:
-        """Apply *func* to modify generated OpenAPI documents."""
+        """
+        Apply a function to modify generated OpenAPI documents.
+        
+        The provided function will be called with the generated OpenAPI schema
+        before it is returned, allowing for custom modifications.
+        
+        Args:
+            func: A function that takes and returns an OpenAPI schema dictionary
+        """
 
         self._openapi_customizer = func
 
     def add_exception_handler(
         self, exc_type: type[Exception], handler: Callable[[Request, Exception], Any]
     ) -> None:
-        """Register a custom *handler* for exceptions of type *exc_type*."""
+        """
+        Register a custom handler for exceptions of specific type.
+        
+        When an exception occurs during request processing, if its type matches
+        the registered exception type (or a subclass), the handler will be called
+        with the request and exception objects.
+        
+        Args:
+            exc_type: Exception class to handle
+            handler: Function that takes a Request and Exception and returns a response
+        """
 
         self.exception_handlers[exc_type] = handler
 
@@ -642,7 +668,16 @@ class ForziumApp:
         return best
 
     def openapi_schema(self) -> dict[str, Any]:
-        """Generate an OpenAPI document for the registered routes."""
+        """
+        Generate an OpenAPI document for the registered routes.
+        
+        Creates a complete OpenAPI 3.0.0 specification document based on all registered
+        routes, including path parameters, query parameters, request bodies, and responses.
+        Also includes security schemes if defined.
+        
+        Returns:
+            Complete OpenAPI schema as a dictionary
+        """
 
         paths: dict[str, dict[str, dict[str, Any]]] = {}
         components: dict[str, dict[str, Any]] = {

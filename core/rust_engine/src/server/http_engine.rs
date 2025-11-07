@@ -62,6 +62,12 @@ pub struct ForziumHttpServer {
     handle: Option<JoinHandle<()>>,
     routes: Arc<Mutex<HashMap<Method, Vec<Route>>>>,
     keep_alive: Option<u64>,
+    // Connection limits and timeouts
+    connection_limit: usize,
+    connection_timeout_secs: u64,
+    request_timeout_secs: u64,
+    read_timeout_secs: u64,
+    write_timeout_secs: u64,
 }
 
 #[pymethods]
@@ -73,7 +79,48 @@ impl ForziumHttpServer {
             handle: None,
             routes: Arc::new(Mutex::new(HashMap::new())),
             keep_alive: None,
+            connection_limit: 100,          // Default: 100 concurrent connections
+            connection_timeout_secs: 60,    // Default: 60s connection timeout 
+            request_timeout_secs: 30,       // Default: 30s request timeout
+            read_timeout_secs: 10,          // Default: 10s read timeout
+            write_timeout_secs: 10,         // Default: 10s write timeout
         }
+    }
+    
+    /// Set the maximum number of concurrent connections.
+    #[pyo3(text_signature = "(self, limit)")]
+    fn set_connection_limit(&mut self, limit: usize) {
+        self.connection_limit = limit;
+    }
+    
+    /// Get the current connection limit.
+    #[pyo3(text_signature = "(self)")]
+    fn get_connection_limit(&self) -> usize {
+        self.connection_limit
+    }
+    
+    /// Set the connection timeout in seconds.
+    #[pyo3(text_signature = "(self, timeout_secs)")]
+    fn set_connection_timeout(&mut self, timeout_secs: u64) {
+        self.connection_timeout_secs = timeout_secs;
+    }
+    
+    /// Set the request timeout in seconds.
+    #[pyo3(text_signature = "(self, timeout_secs)")]
+    fn set_request_timeout(&mut self, timeout_secs: u64) {
+        self.request_timeout_secs = timeout_secs;
+    }
+    
+    /// Set the read timeout in seconds.
+    #[pyo3(text_signature = "(self, timeout_secs)")]
+    fn set_read_timeout(&mut self, timeout_secs: u64) {
+        self.read_timeout_secs = timeout_secs;
+    }
+    
+    /// Set the write timeout in seconds.
+    #[pyo3(text_signature = "(self, timeout_secs)")]
+    fn set_write_timeout(&mut self, timeout_secs: u64) {
+        self.write_timeout_secs = timeout_secs;
     }
 
     /// Register a Python handler for a method and path.
@@ -107,8 +154,16 @@ impl ForziumHttpServer {
             let addr: SocketAddr = addr
                 .parse::<SocketAddr>()
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+            
+            // Clone configuration for the server thread
             let routes = self.routes.clone();
             let keep_alive = self.keep_alive;
+            let connection_limit = self.connection_limit;
+            let connection_timeout = self.connection_timeout_secs;
+            let request_timeout = self.request_timeout_secs;
+            let read_timeout = self.read_timeout_secs;
+            let write_timeout = self.write_timeout_secs;
+            
             let (tx, mut rx) = oneshot::channel();
             let thread = std::thread::spawn(move || {
                 let rt = match Runtime::new() {
@@ -131,6 +186,10 @@ impl ForziumHttpServer {
                     let mut join_set: JoinSet<()> = JoinSet::new();
                     let mut shutdown_requested = false;
 
+                    // Connection counter and limiter
+                    let active_connections = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                    let connection_limiter = Arc::new(tokio::sync::Semaphore::new(connection_limit));
+                    
                     loop {
                         if shutdown_requested {
                             break;
@@ -140,22 +199,94 @@ impl ForziumHttpServer {
                                 shutdown_requested = true;
                             }
                             accept = listener.accept(), if !shutdown_requested => {
-                                let (stream, _) = match accept {
+                                let (stream, client_addr) = match accept {
                                     Ok(s) => s,
                                     Err(e) => {
                                         eprintln!("accept error: {e}");
                                         continue;
                                     }
                                 };
+                                
+                                // Try to acquire a permit, or reject the connection if at limit
+                                let permit = match connection_limiter.clone().try_acquire_owned() {
+                                    Ok(permit) => permit,
+                                    Err(_) => {
+                                        eprintln!("Connection limit reached, rejecting connection from {}", client_addr);
+                                        continue;
+                                    }
+                                };
+                                
+                                let active_connections = active_connections.clone();
+                                let count = active_connections.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                                eprintln!("Connection accepted from {}, active: {}/{}", client_addr, count, connection_limit);
+                                
+                                // Set socket-level timeouts
+                                if let Err(e) = stream.set_nodelay(true) {
+                                    eprintln!("Could not set TCP_NODELAY: {}", e);
+                                }
+                                
+                                // Configure connection options
                                 let routes = routes.clone();
                                 let mut http_builder = builder.clone();
-                                if keep_alive.is_some() {
-                                    http_builder.http1().keep_alive(true);
+                                
+                                // Set keep-alive if configured
+                                if let Some(keep_alive_secs) = keep_alive {
+                                    http_builder.http1().keep_alive(true).keep_alive_timeout(std::time::Duration::from_secs(keep_alive_secs));
+                                } else {
+                                    http_builder.http1().keep_alive(false);
                                 }
+                                
+                                // Set connection timeout
+                                http_builder.http1().timer(tokio::time::sleep(std::time::Duration::from_secs(connection_timeout)));
+                                
                                 let watcher = graceful.watcher();
+                                let active_conn_clone = active_connections.clone();
+                                
                                 join_set.spawn(async move {
+                                    // Use drop guard to ensure we decrement counter and release permit
+                                    struct ConnectionCleanup {
+                                        counter: Arc<std::sync::atomic::AtomicUsize>,
+                                        _permit: tokio::sync::OwnedSemaphorePermit,
+                                        addr: SocketAddr,
+                                    }
+                                    
+                                    impl Drop for ConnectionCleanup {
+                                        fn drop(&mut self) {
+                                            let count = self.counter.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) - 1;
+                                            eprintln!("Connection from {} closed, active: {}", self.addr, count);
+                                        }
+                                    }
+                                    
+                                    let _cleanup = ConnectionCleanup {
+                                        counter: active_conn_clone,
+                                        _permit: permit,
+                                        addr: client_addr,
+                                    };
+                                    
+                                    // Apply request timeout
                                     let io = TokioIo::new(stream);
-                                    let service = service_fn(move |req| handle_request(req, routes.clone()));
+                                    
+                                    // Use a timeout wrapper for the service
+                                    let service = service_fn(move |req| {
+                                        let routes = routes.clone();
+                                        async move {
+                                            match tokio::time::timeout(
+                                                std::time::Duration::from_secs(request_timeout), 
+                                                handle_request(req, routes)
+                                            ).await {
+                                                Ok(result) => result,
+                                                Err(_) => {
+                                                    eprintln!("Request timeout after {} seconds", request_timeout);
+                                                    let response = json_response(
+                                                        408, 
+                                                        serde_json::json!({"detail": "Request timeout"})
+                                                    );
+                                                    Ok(response)
+                                                }
+                                            }
+                                        }
+                                    });
+                                    
                                     let connection = http_builder.serve_connection(io, service).into_owned();
                                     if let Err(err) = watcher.watch(connection).await {
                                         eprintln!("server error: {err}");

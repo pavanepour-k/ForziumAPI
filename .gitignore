@@ -17,6 +17,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 target/
+build_rust.bat
 
 # PEP 582
 __pypackages__/
@@ -67,3 +68,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local
+simple_build.py
+check_server_mode.py
+*fix*.*
+rebuild_rust_extension.py
+*.bat

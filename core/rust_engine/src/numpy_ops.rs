@@ -188,12 +188,12 @@ pub fn get_zero_copy_ops_count() -> usize {
 }
 
 /// Register the NumPy operations module functions
-pub fn register(py: Python<'_>, parent_module: &PyModule) -> PyResult<()> {
+pub fn register(py: Python<'_>, parent_module: &Bound<PyModule>) -> PyResult<()> {
     let m = PyModule::new(py, "numpy_ops")?;
-    m.add_function(wrap_pyfunction!(zero_copy_multiply, m)?)?;
-    m.add_function(wrap_pyfunction!(zero_copy_conv2d, m)?)?;
-    m.add_function(wrap_pyfunction!(zero_copy_elementwise_op, m)?)?;
-    m.add_function(wrap_pyfunction!(get_zero_copy_ops_count, m)?)?;
+    m.add_function(wrap_pyfunction!(zero_copy_multiply, parent_module)?)?;
+    m.add_function(wrap_pyfunction!(zero_copy_conv2d, parent_module)?)?;
+    m.add_function(wrap_pyfunction!(zero_copy_elementwise_op, parent_module)?)?;
+    m.add_function(wrap_pyfunction!(get_zero_copy_ops_count, parent_module)?)?;
     parent_module.add_submodule(m)?;
     Ok(())
 }

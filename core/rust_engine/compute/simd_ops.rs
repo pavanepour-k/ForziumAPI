@@ -121,23 +121,23 @@ pub unsafe fn matmul_avx2(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>
             let row_a = &a[i];
             let row_bt = &bt[j];
 
-            let mut sum_vec = _mm256_setzero_pd(); // 4 doubles initialized to 0
+            let mut sum_vec = unsafe { _mm256_setzero_pd() }; // 4 doubles initialized to 0
 
             // Process 4 elements at a time
             let mut k = 0;
             while k + 4 <= cols_a {
-                let a_vec = _mm256_loadu_pd(row_a[k..].as_ptr());
-                let b_vec = _mm256_loadu_pd(row_bt[k..].as_ptr());
+                let a_vec = unsafe { _mm256_loadu_pd(row_a[k..].as_ptr()) };
+                let b_vec = unsafe { _mm256_loadu_pd(row_bt[k..].as_ptr()) };
 
                 // a * b + sum
-                sum_vec = _mm256_fmadd_pd(a_vec, b_vec, sum_vec);
+                sum_vec = unsafe { _mm256_fmadd_pd(a_vec, b_vec, sum_vec) };
 
                 k += 4;
             }
 
             // Extract the sum from the vector
             let mut sum_array = [0.0; 4];
-            _mm256_storeu_pd(sum_array.as_mut_ptr(), sum_vec);
+            unsafe { _mm256_storeu_pd(sum_array.as_mut_ptr(), sum_vec) };
             let mut sum = sum_array[0] + sum_array[1] + sum_array[2] + sum_array[3];
 
             // Handle remaining elements
@@ -192,22 +192,22 @@ pub unsafe fn matmul_avx512(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f6
             let row_a = &a[i];
             let row_bt = &bt[j];
 
-            let mut sum_vec = _mm512_setzero_pd(); // 8 doubles initialized to 0
+            let mut sum_vec = unsafe { _mm512_setzero_pd() }; // 8 doubles initialized to 0
 
             // Process 8 elements at a time
             let mut k = 0;
             while k + 8 <= cols_a {
-                let a_vec = _mm512_loadu_pd(row_a[k..].as_ptr());
-                let b_vec = _mm512_loadu_pd(row_bt[k..].as_ptr());
+                let a_vec = unsafe { _mm512_loadu_pd(row_a[k..].as_ptr()) };
+                let b_vec = unsafe { _mm512_loadu_pd(row_bt[k..].as_ptr()) };
 
                 // a * b + sum
-                sum_vec = _mm512_fmadd_pd(a_vec, b_vec, sum_vec);
+                sum_vec = unsafe { _mm512_fmadd_pd(a_vec, b_vec, sum_vec) };
 
                 k += 8;
             }
 
             // Extract the sum from the vector
-            let mut sum = _mm512_reduce_add_pd(sum_vec);
+            let mut sum = unsafe { _mm512_reduce_add_pd(sum_vec) };
 
             // Handle remaining elements
             while k < cols_a {
@@ -372,11 +372,11 @@ pub unsafe fn add_avx2(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, 
 
         let mut j = 0;
         while j + 4 <= cols {
-            let a_vec = _mm256_loadu_pd(&row_a[j] as *const f64);
-            let b_vec = _mm256_loadu_pd(&row_b[j] as *const f64);
+            let a_vec = unsafe { _mm256_loadu_pd(&row_a[j] as *const f64) };
+            let b_vec = unsafe { _mm256_loadu_pd(&row_b[j] as *const f64) };
 
-            let sum_vec = _mm256_add_pd(a_vec, b_vec);
-            _mm256_storeu_pd(&mut row_result[j] as *mut f64, sum_vec);
+            let sum_vec = unsafe { _mm256_add_pd(a_vec, b_vec) };
+            unsafe { _mm256_storeu_pd(&mut row_result[j] as *mut f64, sum_vec) };
 
             j += 4;
         }
@@ -417,11 +417,11 @@ pub unsafe fn add_avx512(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>
 
         let mut j = 0;
         while j + 8 <= cols {
-            let a_vec = _mm512_loadu_pd(&row_a[j] as *const f64);
-            let b_vec = _mm512_loadu_pd(&row_b[j] as *const f64);
+            let a_vec = unsafe { _mm512_loadu_pd(&row_a[j] as *const f64) };
+            let b_vec = unsafe { _mm512_loadu_pd(&row_b[j] as *const f64) };
 
-            let sum_vec = _mm512_add_pd(a_vec, b_vec);
-            _mm512_storeu_pd(&mut row_result[j] as *mut f64, sum_vec);
+            let sum_vec = unsafe { _mm512_add_pd(a_vec, b_vec) };
+            unsafe { _mm512_storeu_pd(&mut row_result[j] as *mut f64, sum_vec) };
 
             j += 8;
         }
@@ -556,7 +556,7 @@ pub unsafe fn conv2d_avx2(
 
     for i in 0..out_rows {
         for j in 0..out_cols {
-            let mut sum_vec = _mm256_setzero_pd(); // 4 doubles initialized to 0
+            let _sum_vec = unsafe { _mm256_setzero_pd() }; // 4 doubles initialized to 0 (currently unused)
             let mut sum = 0.0;
 
             for ki in 0..krows {

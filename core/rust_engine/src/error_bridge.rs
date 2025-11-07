@@ -76,12 +76,8 @@ pub fn create_py_error(err: ForziumError) -> PyErr {
     }
 }
 
-/// Improved implementation of From<ForziumError> for PyErr
-impl From<ForziumError> for PyErr {
-    fn from(err: ForziumError) -> PyErr {
-        create_py_error(err)
-    }
-}
+// Note: The From<ForziumError> for PyErr implementation is provided in error.rs
+// This function is still used internally by error_bridge module
 
 /// Wrapper for catching panics and returning enhanced Python exceptions.
 pub fn catch_and_convert<F, R>(f: F) -> PyResult<R>
@@ -125,20 +121,11 @@ pub enum ErrorCategory {
 
 /// Register the error bridge module with Python.
 pub fn register(py: Python<'_>, m: &Bound<PyModule>) -> PyResult<()> {
-    let error_module = PyModule::new_bound(py, "errors")?;
-    error_module.add_function(wrap_pyfunction!(
-        set_verbose_errors,
-        error_module.as_borrowed()
-    )?)?;
-    error_module.add_function(wrap_pyfunction!(
-        set_capture_stack_traces,
-        error_module.as_borrowed()
-    )?)?;
-    error_module.add_function(wrap_pyfunction!(
-        get_last_error,
-        error_module.as_borrowed()
-    )?)?;
+    let error_module = PyModule::new(py, "errors")?;
+    error_module.add_function(wrap_pyfunction!(set_verbose_errors, m)?)?;
+    error_module.add_function(wrap_pyfunction!(set_capture_stack_traces, m)?)?;
+    error_module.add_function(wrap_pyfunction!(get_last_error, m)?)?;
     error_module.add_class::<ErrorCategory>()?;
-    m.add_submodule(error_module.as_borrowed())?;
+    m.add_submodule(error_module)?;
     Ok(())
 }

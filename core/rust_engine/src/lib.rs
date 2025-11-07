@@ -223,14 +223,17 @@ fn run_in_compute_threadpool(py: Python<'_>, func: &Bound<PyAny>) -> PyResult<Py
     // Execute the function in the compute pool
     py.allow_threads(move || {
         run_in_compute_pool(|| {
-            let result = Python::with_gil(|py| func.call0(py));
+            let result = Python::with_gil(|py| func.call0());
             tx.send(result).unwrap();
         });
     });
 
     // Receive the result
     match rx.recv() {
-        Ok(result) => result,
+        Ok(result) => {
+            // Convert the result to a PyObject
+            Python::with_gil(|py| result.map(|obj| obj.into_py(py)))
+        }
         Err(_) => Err(pyo3::exceptions::PyRuntimeError::new_err(
             "Thread pool execution failed",
         )),
@@ -246,14 +249,17 @@ fn run_in_io_threadpool(py: Python<'_>, func: &Bound<PyAny>) -> PyResult<PyObjec
     // Execute the function in the IO pool
     py.allow_threads(move || {
         run_in_io_pool(|| {
-            let result = Python::with_gil(|py| func.call0(py));
+            let result = Python::with_gil(|py| func.call0());
             tx.send(result).unwrap();
         });
     });
 
     // Receive the result
     match rx.recv() {
-        Ok(result) => result,
+        Ok(result) => {
+            // Convert the result to a PyObject
+            Python::with_gil(|py| result.map(|obj| obj.into_py(py)))
+        }
         Err(_) => Err(pyo3::exceptions::PyRuntimeError::new_err(
             "Thread pool execution failed",
         )),
@@ -261,7 +267,7 @@ fn run_in_io_threadpool(py: Python<'_>, func: &Bound<PyAny>) -> PyResult<PyObjec
 }
 
 #[pymodule]
-fn forzium_engine(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+fn forzium_engine(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(multiply, m)?)?;
     m.add_function(wrap_pyfunction!(add, m)?)?;
     m.add_function(wrap_pyfunction!(matmul, m)?)?;

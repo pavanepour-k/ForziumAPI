@@ -226,6 +226,29 @@ def get_user(user_id: int):
 
 ## Troubleshooting
 
+### Python Fallback Mode
+
+ForziumAPI includes an automatic fallback to a pure Python implementation when the Rust extension is not available. This ensures your service can run even if the Rust components haven't been built.
+
+**How it works:**
+- When `python run_server.py` is executed, the system first tries to use the Rust server
+- If the Rust extension isn't available, it automatically falls back to the Python implementation
+- The Python fallback provides the same API endpoints with identical request/response formats
+- All core functionality works, but with lower performance than the Rust version
+
+**Building the Rust extension:**
+To switch from fallback mode to high-performance mode:
+```bash
+python build.py
+```
+
+This will compile the Rust extension and enable all performance optimizations.
+
+**Identifying the mode:**
+You can check which mode you're running in by the startup messages:
+- Rust mode: "ForziumAPI server running at http://..." 
+- Python mode: "Python fallback server running at http://..."
+
 ### Common Issues
 
 **Server won't start:**
@@ -237,6 +260,7 @@ def get_user(user_id: int):
 - Enable debug mode to see request timing
 - Check if you're using async handlers for I/O operations
 - Monitor memory usage for large datasets
+- Verify you're running with the Rust extension (not in fallback mode)
 
 **Validation errors:**
 - Check your request format matches the expected schema

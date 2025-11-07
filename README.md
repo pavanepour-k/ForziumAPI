@@ -6,10 +6,11 @@ ForziumAPI is a high-performance API framework that reimplements FastAPI semanti
 
 Developers continue to author endpoints in Python, but request handling, data validation, and heavy compute live in Rust.  This division eliminates Python’s interpreter overhead for the hot path while keeping the ergonomic decorator API.
 
-ForziumAPI operates in two complementary modes:
+ForziumAPI operates in three complementary modes:
 
 - **Library Mode** – import the application and call handlers directly (zero HTTP cost, ideal for internal calls).
-- **Server Mode** – run the embedded Rust HTTP server (`forzium_engine::ForziumHttpServer`) that dispatches to Python handlers via PyO3.
+- **Rust Server Mode** – run the embedded Rust HTTP server (`forzium_engine::ForziumHttpServer`) that dispatches to Python handlers via PyO3.
+- **Python Fallback Mode** – automatically activates when Rust extensions are unavailable, providing a compatible API server in pure Python.
 
 The current package version is exported as `forzium.__version__ = "0.1.4"`.
 
@@ -29,6 +30,7 @@ The current package version is exported as `forzium.__version__ = "0.1.4"`.
 | Built-in rate limiting | ✅ | Middleware + env config (`FORZIUM_RATE_LIMIT`, `*_WINDOW`, `*_SCOPE`) |
 | Observability | ✅ | OpenTelemetry spans, Prometheus metrics, structured request logging |
 | CLI workflow | ✅ | `forzium run` auto-loads apps; `forzium new` scaffolds projects; `forzium bench` writes JSON reports |
+| Python fallback server | ✅ | Automatic fallback to pure Python implementation when Rust extension is unavailable |
 
 ---
 
@@ -120,7 +122,11 @@ Environment variables `FORZIUM_RATE_LIMIT`, `FORZIUM_RATE_LIMIT_WINDOW`, and `FO
 
 1. Install dependencies: `pip install -r requirements.txt`
 2. Start the server: `python run_server.py`
+   - With Rust extension: High-performance server using Rust backend
+   - Without Rust extension: Automatic fallback to pure Python implementation
 3. Test the API: `curl http://localhost:8000/health`
+
+> **Note:** To build the Rust extension for maximum performance, run `python build.py`
 
 For detailed usage instructions, see [User Guide](docs/USER_GUIDE.md).
 
@@ -129,5 +135,6 @@ For detailed usage instructions, see [User Guide](docs/USER_GUIDE.md).
 * **[User Guide](docs/USER_GUIDE.md)** - Complete usage guide and examples
 * **[Architecture](docs/architecture.md)** - System architecture overview
 * **[Performance Baseline](docs/performance_baseline.md)** - Performance benchmarks
+* **[Python Fallback Server](docs/developer/python_fallback.md)** - Details on the pure Python implementation
 * **[Release Notes](docs/release_notes.md)** - Version history and changes
 * **[Enterprise Guide](docs/enterprise_adoption_note.md)** - Enterprise deployment guide

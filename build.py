@@ -13,13 +13,21 @@ def run_command(cmd: list[str], description: str) -> bool:
     """Run a command and return True if successful."""
     print(f"> {description}...")
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Use bytes mode and utf-8 encoding with errors='replace' to handle encoding issues
+        result = subprocess.run(
+            cmd, 
+            check=True, 
+            capture_output=True, 
+            text=False,  # Use bytes mode
+        )
         print(f"[SUCCESS] {description} completed successfully")
         return True
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] {description} failed:")
         print(f"   Command: {' '.join(cmd)}")
-        print(f"   Error: {e.stderr}")
+        # Safely decode stderr with error handling
+        error_msg = e.stderr.decode('utf-8', errors='replace') if e.stderr else 'No error output'
+        print(f"   Error: {error_msg}")
         return False
 
 
@@ -35,9 +43,11 @@ def check_python_version() -> bool:
 def check_rust_installed() -> bool:
     """Check if Rust is installed."""
     try:
-        result = subprocess.run(["rustc", "--version"], capture_output=True, text=True)
+        result = subprocess.run(["rustc", "--version"], capture_output=True, text=False)
         if result.returncode == 0:
-            print(f"[SUCCESS] Rust detected: {result.stdout.strip()}")
+            # Safely decode stdout with error handling
+            rust_version = result.stdout.decode('utf-8', errors='replace').strip()
+            print(f"[SUCCESS] Rust detected: {rust_version}")
             return True
     except FileNotFoundError:
         pass
@@ -53,8 +63,26 @@ def install_dependencies() -> bool:
                       "Installing Python dependencies")
 
 
+def setup_build_environment():
+    """Set up environment variables for the Rust build."""
+    import os
+    # Set environment variables for PyO3 and maturin
+    env_vars = {
+        "PYO3_PYTHON": sys.executable,  # Use the current Python interpreter
+        "PYTHONIOENCODING": "utf-8",   # Force UTF-8 encoding for Python I/O
+    }
+    
+    # Update environment
+    os.environ.update(env_vars)
+    print("> Setting build environment variables:")
+    for key, value in env_vars.items():
+        print(f"   {key}={value}")
+
 def build_rust_extension() -> bool:
     """Build the Rust extension using maturin."""
+    # Set up the build environment
+    setup_build_environment()
+    
     # Install maturin if not already installed
     print("> Installing maturin...")
     if not run_command([sys.executable, "-m", "pip", "install", "maturin"], 
@@ -107,3 +135,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

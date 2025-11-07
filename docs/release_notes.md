@@ -8,6 +8,7 @@
 - **Background Tasks**: Execute tasks after sending responses using `BackgroundTasks`
 - **Rate Limiting**: Built-in protection against abuse, configurable via environment variables
 - **Better Error Messages**: FastAPI-style validation errors with clear field locations and descriptions
+- **Python Fallback Server**: Automatic pure Python implementation when Rust extension isn't available
 
 ### ⚡ Performance Improvements
 - **Multi-core Processing**: Parallelized compute operations for better performance

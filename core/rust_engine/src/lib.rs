@@ -1,6 +1,5 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
-use pyo3_numpy as numpy;
 
 pub mod async_compute;
 #[path = "../bindings/mod.rs"]

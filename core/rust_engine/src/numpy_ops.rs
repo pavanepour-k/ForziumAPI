@@ -1,10 +1,8 @@
-use numpy::ndarray::{Array1, Array2, ArrayView2};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use pyo3::PyObject;
 use pyo3::Python;
 use pyo3::{exceptions, PyResult};
-use pyo3_numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadwriteArray2};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static ZERO_COPY_OPS_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -23,22 +21,20 @@ static ZERO_COPY_OPS_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[pyfunction]
 pub fn zero_copy_multiply(
     py: Python<'_>,
-    array: &PyArray2<f64>,
+    array: Vec<Vec<f64>>,
     factor: f64,
-) -> PyResult<PyObject> {
-    // Get a view of the array to ensure we don't copy the data
-    let mut array_view = unsafe { array.as_array_mut() };
-
-    // Apply the operation directly to the array's memory
-    for elem in array_view.iter_mut() {
-        *elem *= factor;
-    }
+) -> PyResult<Vec<Vec<f64>>> {
+    // Create a new array with the multiplied values
+    let result: Vec<Vec<f64>> = array
+        .iter()
+        .map(|row| row.iter().map(|&val| val * factor).collect())
+        .collect();
 
     // Increment operation counter
     ZERO_COPY_OPS_COUNT.fetch_add(1, Ordering::Relaxed);
 
     // Return the modified array
-    Ok(array.into_py(py))
+    Ok(result)
 }
 
 /// Apply a convolution operation to a NumPy array without unnecessary data copies
@@ -52,16 +48,21 @@ pub fn zero_copy_multiply(
 #[pyfunction]
 pub fn zero_copy_conv2d(
     py: Python<'_>,
-    image: PyReadonlyArray2<f64>,
-    kernel: PyReadonlyArray2<f64>,
-) -> PyResult<PyObject> {
-    // Get array views (zero-copy)
-    let img_view = image.as_array();
-    let kernel_view = kernel.as_array();
-
+    image: Vec<Vec<f64>>,
+    kernel: Vec<Vec<f64>>,
+) -> PyResult<Vec<Vec<f64>>> {
     // Extract dimensions
-    let (img_rows, img_cols) = (img_view.shape()[0], img_view.shape()[1]);
-    let (k_rows, k_cols) = (kernel_view.shape()[0], kernel_view.shape()[1]);
+    let img_rows = image.len();
+    if img_rows == 0 {
+        return Err(exceptions::PyValueError::new_err("Empty image array"));
+    }
+    let img_cols = image[0].len();
+
+    let k_rows = kernel.len();
+    if k_rows == 0 {
+        return Err(exceptions::PyValueError::new_err("Empty kernel array"));
+    }
+    let k_cols = kernel[0].len();
 
     // Check dimensions
     if k_rows > img_rows || k_cols > img_cols {
@@ -75,26 +76,25 @@ pub fn zero_copy_conv2d(
     let out_cols = img_cols - k_cols + 1;
 
     // Create output array
-    let mut result = Array2::<f64>::zeros((out_rows, out_cols));
+    let mut result = vec![vec![0.0; out_cols]; out_rows];
 
-    // Calculate convolution using the array views (zero-copy)
+    // Calculate convolution
     for i in 0..out_rows {
         for j in 0..out_cols {
             let mut sum = 0.0;
             for ki in 0..k_rows {
                 for kj in 0..k_cols {
-                    sum += img_view[[i + ki, j + kj]] * kernel_view[[ki, kj]];
+                    sum += image[i + ki][j + kj] * kernel[ki][kj];
                 }
             }
-            result[[i, j]] = sum;
+            result[i][j] = sum;
         }
     }
 
     // Increment operation counter
     ZERO_COPY_OPS_COUNT.fetch_add(1, Ordering::Relaxed);
 
-    // Convert result to Python/NumPy array
-    Ok(result.into_pyarray(py).into_py(py))
+    Ok(result)
 }
 
 /// Apply element-wise operation between two NumPy arrays without copying data
@@ -109,49 +109,63 @@ pub fn zero_copy_conv2d(
 #[pyfunction]
 pub fn zero_copy_elementwise_op(
     py: Python<'_>,
-    array_a: PyReadonlyArray2<f64>,
-    array_b: PyReadonlyArray2<f64>,
+    array_a: Vec<Vec<f64>>,
+    array_b: Vec<Vec<f64>>,
     operation: &str,
-) -> PyResult<PyObject> {
-    // Get array views (zero-copy)
-    let a_view = array_a.as_array();
-    let b_view = array_b.as_array();
+) -> PyResult<Vec<Vec<f64>>> {
+    // Check if arrays are empty
+    if array_a.is_empty() || array_b.is_empty() {
+        return Err(exceptions::PyValueError::new_err("Empty input arrays"));
+    }
 
     // Check dimensions
-    if a_view.shape() != b_view.shape() {
+    if array_a.len() != array_b.len() || array_a[0].len() != array_b[0].len() {
         return Err(exceptions::PyValueError::new_err(format!(
-            "Arrays must have the same shape: {:?} vs {:?}",
-            a_view.shape(),
-            b_view.shape()
+            "Arrays must have the same shape: {:?}x{:?} vs {:?}x{:?}",
+            array_a.len(),
+            array_a[0].len(),
+            array_b.len(),
+            array_b[0].len()
         )));
     }
 
+    let rows = array_a.len();
+    let cols = array_a[0].len();
+
     // Create output array
-    let mut result = Array2::<f64>::zeros(a_view.raw_dim());
+    let mut result = vec![vec![0.0; cols]; rows];
 
     // Apply operation
     match operation {
         "add" => {
-            for ((i, j), val) in result.indexed_iter_mut() {
-                *val = a_view[[i, j]] + b_view[[i, j]];
+            for i in 0..rows {
+                for j in 0..cols {
+                    result[i][j] = array_a[i][j] + array_b[i][j];
+                }
             }
         }
         "multiply" => {
-            for ((i, j), val) in result.indexed_iter_mut() {
-                *val = a_view[[i, j]] * b_view[[i, j]];
+            for i in 0..rows {
+                for j in 0..cols {
+                    result[i][j] = array_a[i][j] * array_b[i][j];
+                }
             }
         }
         "subtract" => {
-            for ((i, j), val) in result.indexed_iter_mut() {
-                *val = a_view[[i, j]] - b_view[[i, j]];
+            for i in 0..rows {
+                for j in 0..cols {
+                    result[i][j] = array_a[i][j] - array_b[i][j];
+                }
             }
         }
         "divide" => {
-            for ((i, j), val) in result.indexed_iter_mut() {
-                if b_view[[i, j]] == 0.0 {
-                    return Err(exceptions::PyZeroDivisionError::new_err("Division by zero"));
+            for i in 0..rows {
+                for j in 0..cols {
+                    if array_b[i][j] == 0.0 {
+                        return Err(exceptions::PyZeroDivisionError::new_err("Division by zero"));
+                    }
+                    result[i][j] = array_a[i][j] / array_b[i][j];
                 }
-                *val = a_view[[i, j]] / b_view[[i, j]];
             }
         }
         _ => {
@@ -164,8 +178,7 @@ pub fn zero_copy_elementwise_op(
     // Increment operation counter
     ZERO_COPY_OPS_COUNT.fetch_add(1, Ordering::Relaxed);
 
-    // Convert result to Python/NumPy array
-    Ok(result.into_pyarray(py).into_py(py))
+    Ok(result)
 }
 
 /// Get the count of zero-copy operations performed

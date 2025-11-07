@@ -53,7 +53,7 @@ pub fn create_py_error(err: ForziumError) -> PyErr {
     *LAST_ERROR.write() = message.clone();
 
     // Extract error code and category
-    let (code, category) = match &err {
+    let (_code, _category) = match &err {
         ForziumError::Validation(_) => (1000, "validation"),
         ForziumError::Compute(_) => (2000, "compute"),
         ForziumError::Cancelled(_) => (3000, "cancelled"),
@@ -61,17 +61,17 @@ pub fn create_py_error(err: ForziumError) -> PyErr {
     };
 
     // Determine if we should include detailed information
-    let details = if VERBOSE_ERRORS.load(Ordering::Relaxed) {
-        Some(message)
+    let _details = if VERBOSE_ERRORS.load(Ordering::Relaxed) {
+        Some(message.clone())
     } else {
         None
     };
 
     // Choose appropriate exception type based on error category
     match &err {
-        ForziumError::Validation(_) => PyValueError::new_err(message),
-        ForziumError::ResourceLimit(_) => PyResourceWarning::new_err(message),
-        ForziumError::Cancelled(_) => PyTimeoutError::new_err(message),
+        ForziumError::Validation(_) => PyValueError::new_err(message.clone()),
+        ForziumError::ResourceLimit(_) => PyResourceWarning::new_err(message.clone()),
+        ForziumError::Cancelled(_) => PyTimeoutError::new_err(message.clone()),
         ForziumError::Compute(_) => PyRuntimeError::new_err(message),
     }
 }

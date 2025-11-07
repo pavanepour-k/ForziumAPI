@@ -11,24 +11,24 @@ from pathlib import Path
 
 def run_command(cmd: list[str], description: str) -> bool:
     """Run a command and return True if successful."""
-    print(f"🔄 {description}...")
+    print(f"> {description}...")
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"✅ {description} completed successfully")
+        print(f"[SUCCESS] {description} completed successfully")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} failed:")
+        print(f"[ERROR] {description} failed:")
         print(f"   Command: {' '.join(cmd)}")
         print(f"   Error: {e.stderr}")
         return False
 
 
 def check_python_version() -> bool:
-    """Check if Python version is 3.12+."""
-    if sys.version_info < (3, 12):
-        print("❌ Python 3.12+ is required")
+    """Check if Python version is 3.13."""
+    if sys.version_info < (3, 13):
+        print("[ERROR] Python 3.13 is required")
         return False
-    print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} detected")
+    print(f"[SUCCESS] Python {sys.version_info.major}.{sys.version_info.minor} detected")
     return True
 
 
@@ -37,12 +37,12 @@ def check_rust_installed() -> bool:
     try:
         result = subprocess.run(["rustc", "--version"], capture_output=True, text=True)
         if result.returncode == 0:
-            print(f"✅ Rust detected: {result.stdout.strip()}")
+            print(f"[SUCCESS] Rust detected: {result.stdout.strip()}")
             return True
     except FileNotFoundError:
         pass
     
-    print("❌ Rust is not installed or not in PATH")
+    print("[ERROR] Rust is not installed or not in PATH")
     print("   Please install Rust from https://rustup.rs/")
     return False
 
@@ -55,17 +55,14 @@ def install_dependencies() -> bool:
 
 def build_rust_extension() -> bool:
     """Build the Rust extension using maturin."""
-    # Check if maturin is available
-    try:
-        subprocess.run(["maturin", "--version"], check=True, capture_output=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print("🔄 Installing maturin...")
-        if not run_command([sys.executable, "-m", "pip", "install", "maturin"], 
-                          "Installing maturin"):
-            return False
+    # Install maturin if not already installed
+    print("> Installing maturin...")
+    if not run_command([sys.executable, "-m", "pip", "install", "maturin"], 
+                       "Installing maturin"):
+        return False
     
-    # Build the extension
-    return run_command(["maturin", "develop", "--release"], 
+    # Build the extension using the Python module directly
+    return run_command([sys.executable, "-m", "maturin", "develop", "--release"], 
                       "Building Rust extension")
 
 
@@ -74,17 +71,17 @@ def verify_installation() -> bool:
     try:
         import forzium
         import forzium_engine
-        print("✅ ForziumAPI modules imported successfully")
+        print("[SUCCESS] ForziumAPI modules imported successfully")
         print(f"   Version: {forzium.__version__}")
         return True
     except ImportError as e:
-        print(f"❌ Failed to import ForziumAPI modules: {e}")
+        print(f"[ERROR] Failed to import ForziumAPI modules: {e}")
         return False
 
 
 def main():
     """Main build process."""
-    print("🚀 ForziumAPI Build Script")
+    print("[START] ForziumAPI Build Script")
     print("=" * 40)
     
     # Check prerequisites
@@ -104,10 +101,9 @@ def main():
     if not verify_installation():
         sys.exit(1)
     
-    print("\n🎉 Build completed successfully!")
+    print("\n[COMPLETE] Build completed successfully!")
     print("   You can now run: python run_server.py")
 
 
 if __name__ == "__main__":
     main()
-

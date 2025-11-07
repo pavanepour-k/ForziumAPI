@@ -11,7 +11,7 @@ name = "forzium_engine"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = { version = "0.27.1", features = ["auto-initialize", "numpy"] }
+pyo3 = { version = "0.27.1", features = ["auto-initialize", "extension-module"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["server", "tokio", "http1", "server-auto", "server-graceful"] }

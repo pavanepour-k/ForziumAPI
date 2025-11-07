@@ -128,10 +128,27 @@ class ForziumHttpServer:
         if self._rust_server:
             return self._rust_server.serve(addr)
         else:
-            # Python fallback - for now just raise an error
-            raise RuntimeError(
-                "Rust HTTP server not available. Please build the Rust extension."
-            )
+            # Import and use the simple Python server implementation
+            import subprocess
+            import sys
+            import os
+            import threading
+            
+            host, port = addr.split(":")
+            script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "python_server.py")
+            
+            # Run the server in a separate process
+            def run_server_process():
+                python_path = sys.executable
+                subprocess.Popen([python_path, script_path, host, port])
+            
+            # Start in a thread to avoid blocking
+            server_thread = threading.Thread(target=run_server_process)
+            server_thread.daemon = True
+            server_thread.start()
+            
+            print(f"Starting Python fallback server at http://{addr}")
+            return None
 
     def shutdown(self) -> None:
         """Shutdown the HTTP server."""

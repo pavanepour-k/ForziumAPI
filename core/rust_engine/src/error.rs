@@ -15,12 +15,16 @@ pub enum ForziumError {
     /// Operation was cancelled before completion.
     #[error("cancelled: {0}")]
     Cancelled(String),
+    /// Resource limits exceeded.
+    #[error("resource limit exceeded: {0}")]
+    ResourceLimit(String),
 }
 
 impl From<ForziumError> for PyErr {
     fn from(err: ForziumError) -> PyErr {
         match err {
             ForziumError::Validation(msg) => PyValueError::new_err(msg),
+            ForziumError::ResourceLimit(msg) => pyo3::exceptions::PyResourceWarning::new_err(msg),
             ForziumError::Compute(msg) | ForziumError::Cancelled(msg) => {
                 PyRuntimeError::new_err(msg)
             }

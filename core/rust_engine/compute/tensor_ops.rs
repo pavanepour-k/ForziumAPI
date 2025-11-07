@@ -1,10 +1,11 @@
 use crate::compute::rayon_metrics;
+use crate::compute::resource_limits::{check_tensor_size, OpGuard, RESOURCE_LIMITS};
 use crate::error::ForziumError;
 use rayon::prelude::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-fn validate_matrix(m: &[Vec<f64>]) -> Result<(usize, usize), ForziumError> {
+fn validate_matrix(m: &[Vec<f64>], operation: &str) -> Result<(usize, usize), ForziumError> {
     if m.is_empty() || m[0].is_empty() {
         return Err(ForziumError::Validation("empty tensor".into()));
     }
@@ -12,12 +13,22 @@ fn validate_matrix(m: &[Vec<f64>]) -> Result<(usize, usize), ForziumError> {
     if m.iter().any(|r| r.len() != cols) {
         return Err(ForziumError::Validation("ragged tensor".into()));
     }
+
+    // Check resource limits
+    if let Err(msg) = check_tensor_size(m.len(), cols, operation) {
+        return Err(ForziumError::ResourceLimit(msg));
+    }
+
     Ok((m.len(), cols))
 }
 
-fn validate_same_shape(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<(usize, usize), ForziumError> {
-    let (rows_a, cols_a) = validate_matrix(a)?;
-    let (rows_b, cols_b) = validate_matrix(b)?;
+fn validate_same_shape(
+    a: &[Vec<f64>],
+    b: &[Vec<f64>],
+    operation: &str,
+) -> Result<(usize, usize), ForziumError> {
+    let (rows_a, cols_a) = validate_matrix(a, operation)?;
+    let (rows_b, cols_b) = validate_matrix(b, operation)?;
     if rows_a != rows_b || cols_a != cols_b {
         return Err(ForziumError::Validation("shape mismatch".into()));
     }
@@ -25,7 +36,18 @@ fn validate_same_shape(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<(usize, usize),
 }
 
 pub fn multiply(m: &[Vec<f64>], factor: f64) -> Result<Vec<Vec<f64>>, ForziumError> {
-    validate_matrix(m)?;
+    validate_matrix(m, "multiply")?;
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
+
     Ok(m.par_iter()
         .map(|r| {
             let _guard = rayon_metrics::track_task();
@@ -35,7 +57,18 @@ pub fn multiply(m: &[Vec<f64>], factor: f64) -> Result<Vec<Vec<f64>>, ForziumErr
 }
 
 pub fn add(m: &[Vec<f64>], addend: f64) -> Result<Vec<Vec<f64>>, ForziumError> {
-    validate_matrix(m)?;
+    validate_matrix(m, "add")?;
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
+
     Ok(m.par_iter()
         .map(|r| {
             let _guard = rayon_metrics::track_task();
@@ -45,7 +78,18 @@ pub fn add(m: &[Vec<f64>], addend: f64) -> Result<Vec<Vec<f64>>, ForziumError> {
 }
 
 pub fn transpose(m: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    let (rows, cols) = validate_matrix(m)?;
+    let (rows, cols) = validate_matrix(m, "transpose")?;
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
+
     let mut out = vec![vec![0.0; rows]; cols];
     for (r, row) in m.iter().enumerate() {
         for (c, val) in row.iter().enumerate() {
@@ -56,11 +100,21 @@ pub fn transpose(m: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
 }
 
 pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    let (_rows_a, cols_a) = validate_matrix(a)?;
-    let (rows_b, cols_b) = validate_matrix(b)?;
+    let (_rows_a, cols_a) = validate_matrix(a, "matmul")?;
+    let (rows_b, cols_b) = validate_matrix(b, "matmul")?;
     if cols_a != rows_b {
         return Err(ForziumError::Validation("shape mismatch".into()));
     }
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
     let out: Vec<Vec<f64>> = a
         .par_iter()
         .map(|row_a| {
@@ -79,11 +133,21 @@ pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumEr
 }
 
 pub fn simd_matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    let (_rows_a, cols_a) = validate_matrix(a)?;
-    let (rows_b, cols_b) = validate_matrix(b)?;
+    let (_rows_a, cols_a) = validate_matrix(a, "simd_matmul")?;
+    let (rows_b, cols_b) = validate_matrix(b, "simd_matmul")?;
     if cols_a != rows_b {
         return Err(ForziumError::Validation("shape mismatch".into()));
     }
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
     let bt = transpose(b)?;
     let out: Vec<Vec<f64>> = a
         .par_iter()
@@ -129,7 +193,18 @@ pub fn simd_matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Forz
 }
 
 pub fn elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    validate_same_shape(a, b)?;
+    validate_same_shape(a, b, "elementwise_add")?;
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
+
     Ok(a.par_iter()
         .zip(b.par_iter())
         .map(|(row_a, row_b)| {
@@ -144,7 +219,17 @@ pub fn elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, 
 }
 
 pub fn simd_elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    let (rows, cols) = validate_same_shape(a, b)?;
+    let (rows, cols) = validate_same_shape(a, b, "simd_elementwise_add")?;
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
     let mut out = vec![vec![0.0; cols]; rows];
     #[cfg(target_arch = "x86_64")]
     unsafe {
@@ -176,7 +261,18 @@ pub fn simd_elementwise_add(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f6
 }
 
 pub fn hadamard(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    validate_same_shape(a, b)?;
+    validate_same_shape(a, b, "hadamard")?;
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
+
     Ok(a.par_iter()
         .zip(b.par_iter())
         .map(|(row_a, row_b)| {
@@ -192,11 +288,21 @@ pub fn hadamard(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, Forzium
 
 #[allow(clippy::needless_range_loop)]
 pub fn conv2d(input: &[Vec<f64>], kernel: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, ForziumError> {
-    let (rows, cols) = validate_matrix(input)?;
-    let (krows, kcols) = validate_matrix(kernel)?;
+    let (rows, cols) = validate_matrix(input, "conv2d")?;
+    let (krows, kcols) = validate_matrix(kernel, "conv2d")?;
     if rows < krows || cols < kcols {
         return Err(ForziumError::Validation("kernel larger than input".into()));
     }
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
     let out_rows = rows - krows + 1;
     let out_cols = cols - kcols + 1;
     let mut out = vec![vec![0.0; out_cols]; out_rows];
@@ -241,10 +347,20 @@ pub fn conv2d(input: &[Vec<f64>], kernel: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, 
 
 #[allow(clippy::needless_range_loop)]
 pub fn max_pool2d(input: &[Vec<f64>], size: usize) -> Result<Vec<Vec<f64>>, ForziumError> {
-    let (rows, cols) = validate_matrix(input)?;
+    let (rows, cols) = validate_matrix(input, "max_pool2d")?;
     if size == 0 || rows % size != 0 || cols % size != 0 {
         return Err(ForziumError::Validation("invalid pool size".into()));
     }
+
+    // Try to acquire operation guard
+    let _op_guard = OpGuard::try_new().ok_or_else(|| {
+        ForziumError::ResourceLimit(format!(
+            "Maximum concurrent operations ({}) reached",
+            RESOURCE_LIMITS
+                .max_concurrent_ops
+                .load(std::sync::atomic::Ordering::SeqCst)
+        ))
+    })?;
     let out_rows = rows / size;
     let out_cols = cols / size;
     let mut out = vec![vec![0.0; out_cols]; out_rows];
